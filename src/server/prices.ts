@@ -94,18 +94,80 @@ async function jupiterPrice(mint: string): Promise<Quote> {
   return { price: row.usdPrice, publishTime: Math.floor(Date.now() / 1000), source: "jupiter" }
 }
 
-/** Live prices for many tickers; failures are left out. */
+const cache = new Map<string, { quote: Quote; at: number }>()
+const CACHE_MS = 30_000
+
+/**
+ * Live prices for many tickers in as few requests as possible (display only; the fill guard
+ * calls livePrice). Pyth: one Hermes call across the 24/7 xStock feeds. Keyless: one Jupiter
+ * call per 50 mints. Tickers with no price are left out.
+ */
 export async function livePrices(tickers: string[]) {
   const out = new Map<string, Quote>()
-  await Promise.all(
-    [...new Set(tickers)].map(async (t) => {
-      try {
-        out.set(t, await livePrice(t))
-      } catch {
-        /* no source for this ticker */
+  const now = Date.now()
+  const want: { ticker: string; mint: string; symbol: string; multiplier: number }[] = []
+  for (const t of new Set(tickers)) {
+    const hit = cache.get(t)
+    if (hit && now - hit.at < CACHE_MS) {
+      out.set(t, hit.quote)
+      continue
+    }
+    const token = tokenForTicker(t)
+    if (token) want.push({ ticker: t, mint: token.mint, symbol: token.symbol, multiplier: token.multiplier || 1 })
+  }
+  if (!want.length) return out
+
+  const put = (ticker: string, quote: Quote) => {
+    out.set(ticker, quote)
+    cache.set(ticker, { quote, at: now })
+  }
+
+  if (pythKey()) {
+    try {
+      const ids = await Promise.all(want.map((w) => feedId(`Crypto.${w.symbol.toUpperCase()}/USD`, "crypto")))
+      const pairs = want.map((w, i) => [w, ids[i]] as const).filter(([, id]) => id)
+      if (pairs.length) {
+        const q = pairs.map(([, id]) => `ids[]=${id}`).join("&")
+        const res = await fetch(`${HERMES}/v2/updates/price/latest?${q}&parsed=true`, { headers: pythHeaders() })
+        if (res.ok) {
+          const body = (await res.json()) as { parsed: HermesParsed[] }
+          const byId = new Map(body.parsed.map((p) => [p.id, p.price]))
+          for (const [w, id] of pairs) {
+            const p = byId.get(id!.replace(/^0x/, ""))
+            if (!p) continue
+            const scale = 10 ** p.expo
+            put(w.ticker, {
+              price: (Number(p.price) * scale) / w.multiplier,
+              conf: (Number(p.conf) * scale) / w.multiplier,
+              publishTime: p.publish_time,
+              source: "pyth:xstock",
+            })
+          }
+        }
       }
-    }),
-  )
+    } catch {
+      /* fall through to Jupiter for anything missing */
+    }
+  }
+
+  const missing = want.filter((w) => !out.has(w.ticker))
+  for (let i = 0; i < missing.length; i += 50) {
+    const chunk = missing.slice(i, i + 50)
+    try {
+      const res = await fetch(`${JUP}/price/v3?ids=${chunk.map((c) => c.mint).join(",")}`)
+      if (!res.ok) continue
+      const body = (await res.json()) as Record<string, { usdPrice: number; stockData?: { price: number; updatedAt: string } } | undefined>
+      for (const c of chunk) {
+        const row = body[c.mint]
+        if (!row) continue
+        put(c.ticker, row.stockData
+          ? { price: row.stockData.price, publishTime: Math.floor(Date.parse(row.stockData.updatedAt) / 1000), source: "jupiter" }
+          : { price: row.usdPrice / c.multiplier, publishTime: Math.floor(now / 1000), source: "jupiter" })
+      }
+    } catch {
+      /* leave these out */
+    }
+  }
   return out
 }
 

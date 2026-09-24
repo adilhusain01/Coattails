@@ -41,6 +41,7 @@ import {
 import * as t22 from "@solana-program/token-2022"
 import { eq } from "drizzle-orm"
 import { db, schema } from "../db"
+import { jupiterMirrorBuy } from "./jupiter"
 
 export const USDC_DECIMALS = 6
 export const STOCK_DECIMALS = 8
@@ -56,7 +57,7 @@ async function loadAgent(): Promise<KeyPairSigner> {
   return createKeyPairSignerFromBytes(bytes)
 }
 
-type AgentClient = Awaited<ReturnType<typeof buildClient>>
+export type AgentClient = Awaited<ReturnType<typeof buildClient>>
 
 async function buildClient() {
   const agent = await loadAgent()
@@ -318,14 +319,34 @@ export async function fillBuy(opts: {
   price: number
   stock: Address
   memo: string
+  /** xStock scaled-UI multiplier (mainnet); share-equivalents = tokens x multiplier. */
+  multiplier?: number
 }): Promise<Fill> {
-  if (cluster !== "devnet") throw new Error("Mainnet fills go through Jupiter (not enabled on this deployment)")
   const client = await agentClient()
   const usdc = await usdcMint()
   const from = await ata(opts.owner, usdc)
   const treasury = await ata(client.payer.address, usdc)
   const to = await ata(opts.owner, opts.stock, t22.TOKEN_2022_PROGRAM_ADDRESS)
   const usdcRaw = BigInt(Math.round(opts.usd * 10 ** USDC_DECIMALS))
+
+  if (cluster === "mainnet-beta") {
+    const fill = await jupiterMirrorBuy({
+      client,
+      owner: opts.owner,
+      usdcMint: usdc,
+      userUsdcAta: from,
+      agentUsdcAta: treasury,
+      stockMint: opts.stock,
+      userStockAta: to,
+      amountRaw: usdcRaw,
+      guardPrice: opts.price,
+      multiplier: opts.multiplier ?? 1,
+      maxDeviation: 0.01,
+      memo: opts.memo,
+    })
+    return { sig: fill.sig, usdc: fill.usd, tokens: fill.shares / (opts.multiplier ?? 1) }
+  }
+
   const tokens = opts.usd / opts.price
   const tokenRaw = BigInt(Math.floor(tokens * 10 ** STOCK_DECIMALS))
 

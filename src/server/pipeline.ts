@@ -117,7 +117,7 @@ async function mirrorTrade(trade: schema.Trade, filing: schema.Filing) {
             })
             return
           }
-          const fill = await fillBuy({ owner, usd, price: quote.price, stock, memo })
+          const fill = await fillBuy({ owner, usd, price: quote.price, stock, memo, multiplier: token.multiplier })
           await recordExecution({ ...base, followId: f.id, wallet: f.wallet, usdcAmount: fill.usdc, tokenAmount: fill.tokens, fillPx: quote.price, sig: fill.sig, status: "confirmed" })
         } else {
           const held = await stockBalance(owner, stock)

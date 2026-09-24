@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.128.0",
     "@libsql/client": "^0.18.0",
     "@phosphor-icons/react": "^2.1.10",
+    "@solana-program/compute-budget": "^0.19.0",
     "@solana-program/memo": "^0.15.0",
     "@solana-program/system": "^0.15.0",
     "@solana-program/token": "^0.17.0",
