@@ -35,7 +35,10 @@ const WATCHLIST = (process.env.HOUSE_WATCHLIST ?? "pelosi,khanna,gottheimer,mcca
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean)
 
+let readsPausedUntil = 0
+
 export async function readFilings(limit = 5) {
+  if (Date.now() < readsPausedUntil) return
   const pending = await db
     .select({ filing: schema.filings, name: schema.sources.name })
     .from(schema.filings)
@@ -53,6 +56,12 @@ export async function readFilings(limit = 5) {
         log(`read ${f.docId}: ${n} trades`)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
+        if (/credit|quota|402|429|rate limit/i.test(message)) {
+          // Out of Sarvam credits or rate limited: keep the filing queued and back off.
+          readsPausedUntil = Date.now() + 30 * 60_000
+          log(`read ${f.docId} deferred: ${message.split("\n")[0]}; pausing reads for 30 min`)
+          return
+        }
         log(`read ${f.docId} failed: ${message}`)
         await db.update(schema.filings).set({ status: "failed", error: message }).where(eq(schema.filings.id, f.id))
       }
