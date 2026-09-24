@@ -7,54 +7,30 @@ import {
   HandCoins,
   MagnifyingGlass,
   Receipt,
-  Scan,
-  Seal,
   ShieldCheck,
   Timer,
   TrendDown,
-  Wallet,
   XCircle,
 } from "@phosphor-icons/react/dist/ssr"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { FilingReceipt } from "@/components/filing-receipt"
 import { ExitDiagram } from "@/components/landing/exit-diagram"
+import { companyName, Walkthrough, type WalkthroughExample } from "@/components/landing/walkthrough"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { latestFilings, sourceProfile } from "@/server/queries"
-import { tokenCount } from "@/server/registry"
+import { tokenBySymbol, tokenCount } from "@/server/registry"
+import type { FilingView } from "@/server/queries"
 
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: { absolute: "Coattails: copy what Congress trades" },
 }
-
-const STEPS = [
-  {
-    icon: FileText,
-    title: "A member files",
-    body: "A Periodic Transaction Report appears on the House Clerk's site. Company insiders' purchases come from the SEC within two business days.",
-  },
-  {
-    icon: Scan,
-    title: "The agent reads it",
-    body: "PDFs are read from their text, and scanned paper forms go through OCR. Each trade is matched to a tokenized US stock.",
-  },
-  {
-    icon: Seal,
-    title: "A receipt goes on-chain",
-    body: "Before anything is bought, the filing's hash is written to Solana. Every purchase points back to it.",
-  },
-  {
-    icon: Wallet,
-    title: "Your wallet copies it",
-    body: "Coattails spends your per-trade amount from the USDC you approved. The stock lands in your wallet at the live price.",
-  },
-]
 
 const EXITS = [
   {
@@ -79,11 +55,22 @@ const EXITS = [
   },
 ]
 
-const CUSTODY = [
-  { icon: HandCoins, title: "You set a budget", body: "Coattails can spend up to the amount you approve from your USDC, and nothing more." },
-  { icon: Wallet, title: "Stocks land in your wallet", body: "Every purchase goes to your own account. Nothing is pooled with other people's money." },
-  { icon: XCircle, title: "Revoke with one signature", body: "End the allowance from Coattails or from any wallet app, whenever you like." },
-  { icon: Coins, title: "No SOL needed", body: "Coattails pays the network fees on every transaction it sends for you." },
+const PERMISSIONS = [
+  {
+    icon: HandCoins,
+    title: "Spend up to your budget",
+    body: "When you follow someone you approve a budget, say $100 of USDC. Coattails can spend up to that on the stocks they buy, and nothing more.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Sell what it bought for you",
+    body: "After the first purchase of a stock, one more signature lets Coattails sell that stock when an exit rule fires. Your other tokens stay out of reach.",
+  },
+  {
+    icon: XCircle,
+    title: "Take it back anytime",
+    body: "Revoke either permission from Coattails or from any wallet app. The stocks you hold stay in your wallet.",
+  },
 ]
 
 const SOLANA = [
@@ -97,6 +84,18 @@ const FAQ = [
   {
     q: "Can people in the US use it?",
     a: "No. Tokenized stocks are offered only to people outside the US, and Coattails follows the same rule.",
+  },
+  {
+    q: "Do I get the same price the member got?",
+    a: "No. You buy when the report comes out, often weeks after the trade, at that day's price. Every filing on Coattails shows how far the stock moved in between, so you can judge that before you follow anyone.",
+  },
+  {
+    q: "Do I copy their dollar amount?",
+    a: "No. You set your own amount per trade and a total budget. A member's $1 million purchase becomes, say, a $25 purchase for you.",
+  },
+  {
+    q: "What if the stock isn't available on Solana?",
+    a: "The trade still shows on the filing, marked not tokenized, and nothing is bought. About 950 US stocks are available as tokenized shares today.",
   },
   {
     q: "How late are the reports?",
@@ -147,12 +146,42 @@ function IconCard({ icon: Icon, title, body, index }: { icon: typeof FileText; t
   )
 }
 
+/** The featured filing's first tokenized purchase, shaped for the walkthrough. */
+function walkthroughExample(filing: FilingView | undefined, others: FilingView[]): WalkthroughExample | null {
+  const trade = filing?.trades.find((t) => t.side === "buy" && t.tokenSymbol && t.ticker && t.pxTraded && t.pxDisclosed)
+  const token = trade?.tokenSymbol ? tokenBySymbol(trade.tokenSymbol) : null
+  if (!filing || !trade || !token) return null
+  const untokenized = [filing, ...others].flatMap((f) => f.trades).find((t) => !t.tokenSymbol)
+  return {
+    name: filing.source.name,
+    seat: filing.source.seat,
+    party: filing.source.affiliation,
+    docId: filing.docId,
+    filingUrl: filing.url,
+    filedAt: filing.filedAt,
+    sha256: filing.sha256,
+    receiptSig: filing.receiptSig,
+    ticker: trade.ticker!,
+    assetName: trade.assetName.replace(/\s*\((Purchased|Sold)[^)]*\)\s*$/i, ""),
+    amountLow: trade.amountLow,
+    amountHigh: trade.amountHigh,
+    tradedAt: trade.tradedAt,
+    pxTraded: trade.pxTraded!,
+    pxDisclosed: trade.pxDisclosed!,
+    symbol: token.symbol,
+    mint: token.mint,
+    untokenized: untokenized ? untokenized.assetName.replace(/\s*\(.*$/, "").slice(0, 40) : null,
+    tokenCount: tokenCount(),
+  }
+}
+
 export default async function Landing() {
   const [pelosi, latest] = await Promise.all([sourceProfile("nancy-pelosi"), latestFilings(10)])
   const featured =
     pelosi?.filings.find((f) => f.trades.some((t) => t.tokenSymbol)) ??
     latest.find((f) => f.kind === "house_ptr" && f.trades.some((t) => t.tokenSymbol)) ??
     latest[0]
+  const example = walkthroughExample(featured, latest)
 
   return (
     <>
@@ -244,26 +273,24 @@ export default async function Landing() {
 
         <Separator />
 
-        <Section
-          id="how"
-          title="From a public filing to your wallet"
-          intro="Every report goes through the same four steps, and you can check each one on-chain."
-        >
-          <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map((s, i) => (
-              <li key={s.title} className="grid">
-                <IconCard icon={s.icon} title={s.title} body={s.body} index={i + 1} />
-              </li>
-            ))}
-          </ol>
-        </Section>
+        {example && (
+          <>
+            <Section
+              id="how"
+              title="Follow one trade from the report to your wallet"
+              intro={`This is a real one. ${example.name} reported buying ${companyName(example.assetName)} (${example.ticker}), and these are the numbers Coattails recorded for it. Every report goes through the same stages.`}
+            >
+              <Walkthrough ex={example} />
+            </Section>
 
         <Separator />
+          </>
+        )}
 
         <Section
           id="exits"
           title="Protection for the reporting delay"
-          intro="A member can sell weeks before the report shows it. So every position you hold through Coattails has its own exit rules, checked against the live price every minute."
+          intro="A member can sell weeks before the report shows it. So every position you hold through Coattails has its own exit rules, checked against the live price every 20 seconds."
         >
           <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <Card className="gap-4">
@@ -287,16 +314,19 @@ export default async function Landing() {
 
         <Separator />
 
-        <Section id="custody" title="Your money stays in your wallet">
-          <ul className="grid gap-x-10 gap-y-8 sm:grid-cols-2">
-            {CUSTODY.map((c) => (
-              <li key={c.title} className="grid grid-cols-[1.5rem_1fr] gap-x-3 gap-y-1">
-                <c.icon className="mt-0.5 size-5" weight="duotone" aria-hidden />
-                <h3 className="text-base font-semibold">{c.title}</h3>
-                <p className="col-start-2 text-sm leading-relaxed text-muted-foreground">{c.body}</p>
-              </li>
+        <Section
+          id="custody"
+          title="Two permissions, both in your wallet"
+          intro="Coattails never takes custody of your money. It acts through permissions your wallet grants, each with a limit you set."
+        >
+          <div className="grid gap-4 md:grid-cols-3">
+            {PERMISSIONS.map((p) => (
+              <IconCard key={p.title} {...p} />
             ))}
-          </ul>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Coattails pays the network fee on every transaction it sends for you, so you don&apos;t need SOL.
+          </p>
         </Section>
 
         <Separator />
