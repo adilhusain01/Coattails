@@ -250,6 +250,19 @@ export async function buildApproveTx(owner: Address, budgetUsd: number, memo: st
   ])
 }
 
+/**
+ * The same approval, already signed by the agent as fee payer, for Blink clients that sign and
+ * send the transaction themselves.
+ */
+export async function buildApproveTxPresigned(owner: Address, budgetUsd: number, memo: string) {
+  const wire = await buildApproveTx(owner, budgetUsd, memo)
+  pending.delete(owner)
+  const client = await agentClient()
+  const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire))
+  const signed = await partiallySignTransaction([client.payer.keyPair], tx)
+  return getBase64EncodedWireTransaction(signed)
+}
+
 export async function buildRevokeTx(owner: Address) {
   const mint = await usdcMint()
   const source = await ata(owner, mint)
