@@ -7,7 +7,6 @@ import {
   useDisconnect,
   useWallets,
   useWalletStatus,
-  WalletReadyGate,
 } from "@solana/kit-plugin-wallet/react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -93,16 +92,5 @@ function WalletMenu() {
 }
 
 export function WalletButton() {
-  return (
-    <WalletReadyGate
-      client={client}
-      fallback={
-        <Button size="sm" disabled>
-          <Wallet /> Connect wallet
-        </Button>
-      }
-    >
-      <WalletMenu />
-    </WalletReadyGate>
-  )
+  return <WalletMenu />
 }

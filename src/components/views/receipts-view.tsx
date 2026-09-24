@@ -121,7 +121,7 @@ export function ReceiptsView({ log: initial }: { log: ReceiptsLog }) {
                   </TableCell>
                   <TableCell>
                     <a href={f.url} target="_blank" rel="noreferrer" className="hover:underline">
-                      PTR {f.docId}
+                      {f.kind === "form4" ? `Form 4 ${f.docId}` : `PTR ${f.docId}`}
                     </a>
                   </TableCell>
                   <TableCell className="text-muted-foreground" title={f.sha256 ?? undefined}>

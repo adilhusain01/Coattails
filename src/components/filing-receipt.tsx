@@ -73,7 +73,7 @@ export function FilingReceipt({ filing, action, compact = false }: { filing: Fil
           rel="noreferrer"
           className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
         >
-          PTR {filing.docId}
+          {filing.kind === "form4" ? "Form 4" : `PTR ${filing.docId}`}
           <ArrowSquareOut className="size-3.5" />
         </a>
       </header>

@@ -23,6 +23,14 @@ export function MemberAvatar({ source, className }: { source: SourceView; classN
 }
 
 export function PartySeat({ source }: { source: SourceView }) {
+  if (source.kind === "insider") {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="border px-1 font-mono text-[10px] font-bold text-foreground">{source.seat}</span>
+        <span className="truncate">{source.affiliation}</span>
+      </span>
+    )
+  }
   const party = source.affiliation ? PARTY[source.affiliation] : null
   const seat = source.seat ? `${source.seat.slice(0, 2)}-${Number(source.seat.slice(2)) || "AL"}` : null
   return (

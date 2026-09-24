@@ -23,9 +23,9 @@ export function MembersView(props: { leaders: LeaderRow[] }) {
   return (
     <div className="grid gap-6 pt-8">
       <header className="grid gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Members</h1>
+        <h1 className="text-3xl font-bold tracking-tight">People to mirror</h1>
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          Everyone whose recent filings the agent has read. Copy return is what a mirror would have made on their
+          House members and company insiders whose recent filings the agent has read. Copy return is what a mirror would have made on their
           tokenized buys since the disclosure date. Filing delay is how much the stock had already moved between the trade
           and its disclosure.
         </p>
