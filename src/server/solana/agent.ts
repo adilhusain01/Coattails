@@ -432,8 +432,13 @@ export async function fillSell(opts: {
   return { sig, usdc: usd, tokens: opts.tokens }
 }
 
-/** Approve the agent to sell each listed stock position (auto-sell). Signed by the follower. */
-export async function buildStockApproveTx(owner: Address, stocks: { mint: Address; tokens: number }[]) {
+const U64_MAX = 18_446_744_073_709_551_615n
+
+/**
+ * Lets the agent sell the follower's mirrored stocks (exit rules and disclosed sales). The
+ * allowance is on those stock accounts only and covers later buys of the same stock.
+ */
+export async function buildStockApproveTx(owner: Address, stocks: { mint: Address }[]) {
   const user = createNoopSigner(owner)
   return unsignedForWallet(owner, [
     ...(await Promise.all(
@@ -443,12 +448,12 @@ export async function buildStockApproveTx(owner: Address, stocks: { mint: Addres
           mint: s.mint,
           delegate: (await agentClient()).payer.address,
           owner: user,
-          amount: BigInt(Math.ceil(s.tokens * 10 ** STOCK_DECIMALS)),
+          amount: U64_MAX,
           decimals: STOCK_DECIMALS,
         }),
       ),
     )),
-    getAddMemoInstruction({ memo: "coattails:auto-sell" }),
+    getAddMemoInstruction({ memo: "coattails:allow-exits" }),
   ])
 }
 

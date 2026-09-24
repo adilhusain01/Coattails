@@ -85,6 +85,10 @@ export const follows = sqliteTable(
     /** USDC spent per mirrored buy. */
     perTradeUsd: real("per_trade_usd").notNull(),
     autoSell: integer("auto_sell", { mode: "boolean" }).notNull().default(true),
+    /** Sell when the price falls this fraction below the position's peak. Null = off. */
+    trailingStopPct: real("trailing_stop_pct").default(0.15),
+    /** Sell when a position has been held this many days without a disclosed sale. Null = off. */
+    maxHoldDays: integer("max_hold_days").default(90),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     approveSig: text("approve_sig"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
@@ -116,7 +120,10 @@ export const executions = sqliteTable(
     reason: text("reason"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
-  (t) => [uniqueIndex("executions_trade_follow").on(t.tradeId, t.followId), index("executions_wallet").on(t.wallet)],
+  (t) => [
+    uniqueIndex("executions_trade_follow_side").on(t.tradeId, t.followId, t.side),
+    index("executions_wallet").on(t.wallet),
+  ],
 )
 
 export type Source = typeof sources.$inferSelect
@@ -130,3 +137,37 @@ export const kv = sqliteTable("kv", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 })
+
+/** A follower's holding of one stock bought by mirroring one person. Exit rules act on these. */
+export const positions = sqliteTable(
+  "positions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    wallet: text("wallet").notNull(),
+    followId: integer("follow_id")
+      .notNull()
+      .references(() => follows.id),
+    /** The trade that opened the position. */
+    tradeId: integer("trade_id")
+      .notNull()
+      .references(() => trades.id),
+    tokenSymbol: text("token_symbol").notNull(),
+    ticker: text("ticker").notNull(),
+    tokens: real("tokens").notNull(),
+    costUsd: real("cost_usd").notNull(),
+    entryPx: real("entry_px").notNull(),
+    peakPx: real("peak_px").notNull(),
+    lastPx: real("last_px"),
+    openedAt: integer("opened_at", { mode: "timestamp" }).notNull(),
+    status: text("status", { enum: ["open", "closed"] }).notNull().default("open"),
+    /** Set when an exit rule fired but the follower has not allowed Coattails to sell. */
+    exitDue: text("exit_due"),
+    closedAt: integer("closed_at", { mode: "timestamp" }),
+    closeReason: text("close_reason", { enum: ["member_sold", "trailing_stop", "max_hold", "manual"] }),
+    closePx: real("close_px"),
+    closeSig: text("close_sig"),
+  },
+  (t) => [index("positions_wallet").on(t.wallet), index("positions_open").on(t.status)],
+)
+
+export type Position = typeof positions.$inferSelect

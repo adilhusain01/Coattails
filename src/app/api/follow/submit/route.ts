@@ -5,9 +5,15 @@ import { fail, handle, isWallet, ok } from "@/server/http"
 import { cosignAndSend } from "@/server/solana/agent"
 
 type Intent =
-  | { type: "follow"; slug: string; perTradeUsd: number }
+  | { type: "follow"; slug: string; perTradeUsd: number; trailingStopPct?: number | null; maxHoldDays?: number | null }
   | { type: "revoke" }
   | { type: "autosell" }
+
+function clampOrNull(v: unknown, min: number, max: number) {
+  if (v === null) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null
+}
 
 /** Co-signs a wallet-signed transaction the server built, then records what it did. */
 export async function POST(req: Request) {
@@ -19,6 +25,8 @@ export async function POST(req: Request) {
     const intent = body.intent
 
     if (intent.type === "follow") {
+      const trailingStopPct = clampOrNull(intent.trailingStopPct, 0.02, 0.9)
+      const maxHoldDays = clampOrNull(intent.maxHoldDays, 1, 3650)
       const source = await db.query.sources.findFirst({ where: eq(schema.sources.slug, intent.slug) })
       if (!source) return fail("Unknown member", 404)
       await db
@@ -27,13 +35,15 @@ export async function POST(req: Request) {
           wallet,
           sourceId: source.id,
           perTradeUsd: intent.perTradeUsd,
+          trailingStopPct,
+          maxHoldDays,
           approveSig: sig,
           active: true,
           createdAt: new Date(),
         })
         .onConflictDoUpdate({
           target: [schema.follows.wallet, schema.follows.sourceId],
-          set: { perTradeUsd: intent.perTradeUsd, approveSig: sig, active: true, createdAt: new Date() },
+          set: { perTradeUsd: intent.perTradeUsd, trailingStopPct, maxHoldDays, approveSig: sig, active: true, createdAt: new Date() },
         })
     } else if (intent.type === "revoke") {
       await db.update(schema.follows).set({ active: false }).where(eq(schema.follows.wallet, wallet))

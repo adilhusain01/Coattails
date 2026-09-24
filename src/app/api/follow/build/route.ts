@@ -6,7 +6,12 @@ import { buildApproveTx } from "@/server/solana/agent"
 
 export async function POST(req: Request) {
   return handle(async () => {
-    const body = (await req.json()) as { wallet?: string; slug?: string; perTradeUsd?: number; budgetUsd?: number }
+    const body = (await req.json()) as {
+      wallet?: string
+      slug?: string
+      perTradeUsd?: number
+      budgetUsd?: number
+    }
     if (!isWallet(body.wallet)) return fail("Connect a wallet first")
     const per = Number(body.perTradeUsd)
     const budget = Number(body.budgetUsd)

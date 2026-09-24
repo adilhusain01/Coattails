@@ -240,10 +240,40 @@ export async function walletState(wallet: string) {
     orderBy: desc(schema.executions.createdAt),
     limit: 100,
   })
+  const positions = await db.query.positions.findMany({
+    where: eq(schema.positions.wallet, wallet),
+    orderBy: desc(schema.positions.openedAt),
+    limit: 100,
+  })
+  const followById = new Map(follows.map((f) => [f.id, f]))
   return {
+    positions: positions.map((p) => {
+      const f = followById.get(p.followId)
+      return {
+        id: p.id,
+        tokenSymbol: p.tokenSymbol,
+        ticker: p.ticker,
+        tokens: p.tokens,
+        costUsd: p.costUsd,
+        entryPx: p.entryPx,
+        peakPx: p.peakPx,
+        lastPx: p.lastPx,
+        stopPx: f?.trailingStopPct ? p.peakPx * (1 - f.trailingStopPct) : null,
+        sellBy: f?.maxHoldDays ? new Date(p.openedAt.getTime() + f.maxHoldDays * 86_400_000).toISOString() : null,
+        openedAt: p.openedAt.toISOString(),
+        status: p.status,
+        exitDue: p.exitDue,
+        closeReason: p.closeReason,
+        closePx: p.closePx,
+        closeSig: p.closeSig,
+        source: f ? sourceView(sourceById.get(f.sourceId)!) : null,
+      }
+    }),
     follows: follows.map((f) => ({
       id: f.id,
       perTradeUsd: f.perTradeUsd,
+      trailingStopPct: f.trailingStopPct,
+      maxHoldDays: f.maxHoldDays,
       autoSell: f.autoSell,
       active: f.active,
       createdAt: f.createdAt.toISOString(),

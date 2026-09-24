@@ -7,7 +7,7 @@ import { and, asc, desc, eq, inArray, isNull, lt, lte } from "drizzle-orm"
 import { db, schema } from "./db"
 import { readHouseFiling, syncHouseIndex } from "./ingest/house"
 import { syncForm4 } from "./ingest/sec"
-import { livePrice } from "./prices"
+import { livePrice, livePrices } from "./prices"
 import { tokenBySymbol } from "./registry"
 import { fillBuy, fillSell, stockBalance, stockMint, usdcAllowance, writeReceipt } from "./solana/agent"
 
@@ -162,19 +162,27 @@ async function mirrorTrade(trade: schema.Trade, filing: schema.Filing) {
           }
           const fill = await fillBuy({ owner, usd, price: quote.price, stock, memo, multiplier: token.multiplier })
           await recordExecution({ ...base, followId: f.id, wallet: f.wallet, usdcAmount: fill.usdc, tokenAmount: fill.tokens, fillPx: quote.price, sig: fill.sig, status: "confirmed" })
+          await openPosition({ follow: f, trade, symbol: token.symbol, tokens: fill.tokens, usd: fill.usdc, price: quote.price })
         } else {
-          const held = await stockBalance(owner, stock)
-          const tokens = Math.min(held.tokens, held.delegatedToAgent)
-          if (held.tokens <= 0) {
-            await recordExecution({ ...base, followId: f.id, wallet: f.wallet, status: "rejected", reason: `No ${token.symbol} to sell` })
+          // Sell only what was bought by mirroring this member.
+          const open = await db.query.positions.findMany({
+            where: and(eq(schema.positions.followId, f.id), eq(schema.positions.tokenSymbol, token.symbol), eq(schema.positions.status, "open")),
+          })
+          const owned = open.reduce((a, p) => a + p.tokens, 0)
+          if (owned <= 0) {
+            await recordExecution({ ...base, followId: f.id, wallet: f.wallet, status: "rejected", reason: `No ${token.symbol} bought from this member to sell` })
             return
           }
-          if (!f.autoSell || tokens <= 0) {
-            await recordExecution({ ...base, followId: f.id, wallet: f.wallet, status: "rejected", reason: "Auto-sell is off for this position. Sell it from your portfolio." })
+          const held = await stockBalance(owner, stock)
+          const tokens = Math.min(owned, held.tokens, held.delegatedToAgent)
+          if (tokens <= 0) {
+            for (const p of open) await markExitDue(p, `${trade.side === "sell" ? "The member sold" : "Exit"}: allow Coattails to sell`)
+            await recordExecution({ ...base, followId: f.id, wallet: f.wallet, status: "rejected", reason: "Selling is not allowed yet. Allow it from your portfolio." })
             return
           }
           const fill = await fillSell({ owner, tokens, price: quote.price, stock, memo })
           await recordExecution({ ...base, followId: f.id, wallet: f.wallet, usdcAmount: fill.usdc, tokenAmount: fill.tokens, fillPx: quote.price, sig: fill.sig, status: "confirmed" })
+          for (const p of open) await closePosition(p, "member_sold", quote.price, fill.sig)
         }
       } catch (err) {
         await recordExecution({ ...base, followId: f.id, wallet: f.wallet, status: "failed", reason: err instanceof Error ? err.message.slice(0, 300) : String(err) })
@@ -203,9 +211,123 @@ export async function mirror(limit = 10) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Positions and exit rules. Disclosures arrive late, so a member's sale may come after the drop.
+// Each position carries its own exits, checked against live prices every tick: a trailing stop
+// from the highest price seen, and a maximum holding period.
+
+async function openPosition(opts: { follow: schema.Follow; trade: schema.Trade; symbol: string; tokens: number; usd: number; price: number }) {
+  const existing = await db.query.positions.findFirst({
+    where: and(eq(schema.positions.followId, opts.follow.id), eq(schema.positions.tokenSymbol, opts.symbol), eq(schema.positions.status, "open")),
+  })
+  if (existing) {
+    const tokens = existing.tokens + opts.tokens
+    const cost = existing.costUsd + opts.usd
+    await db
+      .update(schema.positions)
+      .set({ tokens, costUsd: cost, entryPx: cost / tokens, peakPx: Math.max(existing.peakPx, opts.price), lastPx: opts.price })
+      .where(eq(schema.positions.id, existing.id))
+    return
+  }
+  await db.insert(schema.positions).values({
+    wallet: opts.follow.wallet,
+    followId: opts.follow.id,
+    tradeId: opts.trade.id,
+    tokenSymbol: opts.symbol,
+    ticker: opts.trade.ticker!,
+    tokens: opts.tokens,
+    costUsd: opts.usd,
+    entryPx: opts.price,
+    peakPx: opts.price,
+    lastPx: opts.price,
+    openedAt: new Date(),
+  })
+}
+
+async function closePosition(p: schema.Position, reason: NonNullable<schema.Position["closeReason"]>, price: number, sig: string) {
+  await db
+    .update(schema.positions)
+    .set({ status: "closed", closeReason: reason, closePx: price, closeSig: sig, closedAt: new Date(), exitDue: null, lastPx: price })
+    .where(eq(schema.positions.id, p.id))
+}
+
+async function markExitDue(p: schema.Position, why: string) {
+  if (p.exitDue !== why) await db.update(schema.positions).set({ exitDue: why }).where(eq(schema.positions.id, p.id))
+}
+
+function exitReason(p: schema.Position, f: schema.Follow, price: number) {
+  if (f.trailingStopPct && price <= p.peakPx * (1 - f.trailingStopPct)) {
+    return { rule: "trailing_stop" as const, text: `Trailing stop: ${(((p.peakPx - price) / p.peakPx) * 100).toFixed(1)}% below the $${p.peakPx.toFixed(2)} peak` }
+  }
+  const days = (Date.now() - p.openedAt.getTime()) / 86_400_000
+  if (f.maxHoldDays && days >= f.maxHoldDays) {
+    return { rule: "max_hold" as const, text: `Held ${Math.floor(days)} days, the limit you set` }
+  }
+  return null
+}
+
+export async function guardExits() {
+  const open = await db.query.positions.findMany({ where: eq(schema.positions.status, "open") })
+  if (!open.length) return
+  const prices = await livePrices(open.map((p) => p.ticker))
+  const follows = await db.query.follows.findMany({ where: inArray(schema.follows.id, [...new Set(open.map((p) => p.followId))]) })
+  const followById = new Map(follows.map((f) => [f.id, f]))
+
+  for (const p of open) {
+    const quote = prices.get(p.ticker)
+    const f = followById.get(p.followId)
+    if (!quote || !f) continue
+    const peak = Math.max(p.peakPx, quote.price)
+    if (peak !== p.peakPx || quote.price !== p.lastPx) {
+      await db.update(schema.positions).set({ peakPx: peak, lastPx: quote.price }).where(eq(schema.positions.id, p.id))
+    }
+    const exit = exitReason({ ...p, peakPx: peak }, f, quote.price)
+    if (!exit) continue
+
+    const token = tokenBySymbol(p.tokenSymbol)
+    if (!token) continue
+    try {
+      const owner = address(p.wallet)
+      const stock = await stockMint(token.symbol, token.name, token.mint)
+      const held = await stockBalance(owner, stock)
+      const tokens = Math.min(p.tokens, held.tokens, held.delegatedToAgent)
+      if (held.tokens <= 0) {
+        await closePosition(p, "manual", quote.price, "")
+        continue
+      }
+      if (tokens <= 0) {
+        await markExitDue(p, exit.text)
+        continue
+      }
+      const memo = `coattails:v1|exit|${exit.rule}|${token.symbol}|px:${quote.price.toFixed(4)}|src:${quote.source}`
+      const fill = await fillSell({ owner, tokens, price: quote.price, stock, memo })
+      await recordExecution({
+        tradeId: p.tradeId,
+        followId: p.followId,
+        wallet: p.wallet,
+        side: "sell",
+        tokenSymbol: token.symbol,
+        usdcAmount: fill.usdc,
+        tokenAmount: fill.tokens,
+        pythPx: quote.price,
+        fillPx: quote.price,
+        sig: fill.sig,
+        status: "confirmed",
+        reason: exit.text,
+        createdAt: new Date(),
+      })
+      await closePosition(p, exit.rule, quote.price, fill.sig)
+      log(`exit ${exit.rule} ${token.symbol} for ${p.wallet}`)
+    } catch (err) {
+      log(`exit ${p.tokenSymbol} for ${p.wallet} failed: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+}
+
 export async function tick() {
   await ingest().catch((e) => log("ingest failed", e))
   if (process.env.SARVAM_API_KEY) await readFilings()
   await writeReceipts()
   await mirror()
+  await guardExits().catch((e) => log("exits failed", e))
 }
