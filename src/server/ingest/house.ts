@@ -110,7 +110,7 @@ function mirrorable(line: PtrExtraction["transactions"][number]) {
   return false
 }
 
-/** Downloads a filing, has Claude read it, and stores its trades. */
+/** Downloads a filing, has the agent read it, and stores its trades. */
 export async function readHouseFiling(filing: schema.Filing) {
   const res = await fetch(filing.url)
   if (!res.ok) throw new Error(`PDF ${res.status}`)
@@ -153,7 +153,7 @@ export async function readHouseFiling(filing: schema.Filing) {
   if (rows.length) await db.insert(schema.trades).values(rows)
   await db
     .update(schema.filings)
-    .set({ sha256, status: "parsed", readBy: "claude", error: doc.legible ? null : "Partly illegible scan" })
+    .set({ sha256, status: "parsed", readBy: doc.readBy, error: doc.legible ? null : "Partly illegible scan" })
     .where(eq(schema.filings.id, filing.id))
   return rows.length
 }

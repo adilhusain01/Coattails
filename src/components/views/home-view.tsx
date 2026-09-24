@@ -13,7 +13,7 @@ import type { FilingView, LeaderRow } from "@/server/queries"
 
 const STEPS = [
   ["A member files", "House members report trades on a Periodic Transaction Report, up to 45 days after trading."],
-  ["The agent reads it", "Claude reads the PDF the day the Clerk publishes it, including scanned paper forms."],
+  ["The agent reads it", "The agent reads the PDF the day the Clerk publishes it; scanned paper forms go through OCR first."],
   ["A receipt goes on-chain", "The filing's hash is written to Solana before any trade, so every fill traces back to it."],
   ["Your wallet mirrors it", "Buys and sells fill into your own wallet at the live Pyth price, any hour of the week."],
 ]

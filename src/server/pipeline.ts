@@ -171,7 +171,7 @@ export async function mirror(limit = 10) {
 
 export async function tick() {
   await ingest().catch((e) => log("ingest failed", e))
-  if (process.env.ANTHROPIC_API_KEY) await readFilings()
+  if (process.env.SARVAM_API_KEY) await readFilings()
   await writeReceipts()
   await mirror()
 }

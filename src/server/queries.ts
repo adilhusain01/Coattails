@@ -98,7 +98,7 @@ async function filingViews(filings: schema.Filing[]): Promise<FilingView[]> {
   }))
 }
 
-/** Filings Claude has read, newest first. */
+/** Filings the agent has read, newest first. */
 export async function latestFilings(limit = 20) {
   const filings = await db.query.filings.findMany({
     where: inArray(schema.filings.status, ["parsed", "receipted"]),

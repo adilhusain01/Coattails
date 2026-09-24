@@ -32,7 +32,7 @@ export const filings = sqliteTable(
     status: text("status", { enum: ["new", "parsed", "receipted", "failed"] })
       .notNull()
       .default("new"),
-    /** How the document was read: "claude" for PDFs, "xml" for Form 4. */
+    /** How the document was read: "sarvam" or "sarvam+ocr" for PDFs, "xml" for Form 4. */
     readBy: text("read_by"),
     receiptSig: text("receipt_sig"),
     error: text("error"),

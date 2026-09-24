@@ -11,14 +11,15 @@ app people will actually use?": real need, working end-to-end demo, why Solana, 
 
 ```
 House Clerk FD index ──┐                                   ┌─> follower wallet A (own USDC, own xStock ATA)
-SEC EDGAR Form 4 feed ─┼─> ingest ─> Claude reads PDF ─> trades ─> match ticker ─> Memo receipt ─> executor ─┼─> follower wallet B
+SEC EDGAR Form 4 feed ─┼─> ingest ─> Sarvam reads PDF ─> trades ─> match ticker ─> Memo receipt ─> executor ─┼─> follower wallet B
                        │   (worker)  (structured output)          to token mint   (filing hash)   (Pyth guard) └─> ...
 ```
 
 1. **Ingest** (`src/server/ingest/*`, run by `worker/index.ts`): polls the House Clerk 2026 index
    for new PTRs and EDGAR for new Form 4 filings with transaction code `P`.
-2. **Read**: every PTR PDF goes to Claude (PDF document input, structured output). E-filed and
-   scanned/handwritten forms go through the same path. Output: ticker, asset name, side, amount
+2. **Read**: text comes from the PDF's text layer (unpdf); scanned paper forms go through Sarvam
+   Document Intelligence OCR. `sarvam-105b` turns the text into trades with a JSON schema, and the
+   reply is validated with Zod. Output: ticker, asset name, side, amount
    range, trade date, notification date.
 3. **Match**: ticker to tokenized-stock mint via the registry (`src/server/registry.ts`, xStocks
    first, Ondo second). Unmatched tickers are stored and shown as "not tokenized yet".
@@ -62,7 +63,7 @@ Everything except the fill function is identical across modes.
 - Solana: `@solana/kit` 8 plugin clients, `@solana/kit-plugin-wallet` (Wallet Standard),
   `@solana-program/{system,token,token-2022,memo}`. Transactions are v0 for wallet compatibility.
 - Data: libSQL (SQLite file) via Drizzle ORM. `data/coattails.db`.
-- Agent: `@anthropic-ai/sdk`, PDF document input, structured output.
+- Agent: `sarvamai` SDK: `sarvam-105b` chat with JSON-schema output, Document Intelligence for OCR.
 - Prices: Pyth Hermes (latest) and Pyth Benchmarks (historical, for disclosure-lag cost).
 - Runtime: pm2 runs `web` (next start, port 3000) and `worker` (tsx). Public URL via Tailscale Funnel.
 

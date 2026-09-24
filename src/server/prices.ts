@@ -60,19 +60,24 @@ async function hermesLatest(id: string) {
 export async function livePrice(ticker: string): Promise<Quote> {
   const token = tokenForTicker(ticker)
   if (pythKey()) {
-    const now = Math.floor(Date.now() / 1000)
-    const eqId = await feedId(`Equity.US.${ticker}/USD`, "equity")
-    if (eqId) {
-      const q = await hermesLatest(eqId)
-      if (now - q.publishTime < 120) return { ...q, source: "pyth:equity" }
-    }
-    if (token) {
-      const xId = await feedId(`Crypto.${token.symbol.toUpperCase()}/USD`, "crypto")
-      if (xId) {
-        const q = await hermesLatest(xId)
-        const m = token.multiplier || 1
-        return { price: q.price / m, conf: q.conf / m, publishTime: q.publishTime, source: "pyth:xstock" }
+    // A key may not be entitled to every feed; any Pyth failure falls through to Jupiter.
+    try {
+      const now = Math.floor(Date.now() / 1000)
+      const eqId = await feedId(`Equity.US.${ticker}/USD`, "equity")
+      if (eqId) {
+        const q = await hermesLatest(eqId).catch(() => null)
+        if (q && now - q.publishTime < 120) return { ...q, source: "pyth:equity" }
       }
+      if (token) {
+        const xId = await feedId(`Crypto.${token.symbol.toUpperCase()}/USD`, "crypto")
+        if (xId) {
+          const q = await hermesLatest(xId)
+          const m = token.multiplier || 1
+          return { price: q.price / m, conf: q.conf / m, publishTime: q.publishTime, source: "pyth:xstock" }
+        }
+      }
+    } catch {
+      /* not entitled or unavailable */
     }
   }
   if (!token) throw new Error(`No price source for ${ticker}`)

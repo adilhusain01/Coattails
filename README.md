@@ -13,8 +13,9 @@ Built for the Stocklana hackathon (Solana, September 2026).
 
 1. **The filing is published.** House members file Periodic Transaction Reports (PTRs) with the
    Clerk, up to 45 days after trading. Company insiders file SEC Form 4 within two business days.
-2. **The agent reads it.** Claude reads each PTR PDF, including scanned and handwritten paper
-   forms. Form 4 is XML and is parsed directly. Each trade's ticker is matched against 950 US
+2. **The agent reads it.** Sarvam AI (`sarvam-105b`) turns each PTR into structured trades. Text
+   comes from the PDF's text layer; scanned paper forms go through Sarvam Document Intelligence
+   OCR first. Form 4 is XML and is parsed directly. Each trade's ticker is matched against 950 US
    xStocks.
 3. **A receipt goes on-chain.** Before any trade, the agent writes a Memo transaction with the
    filing's sha256 hash. Anyone can check that a fill copied a real public document.
@@ -40,7 +41,7 @@ Built for the Stocklana hackathon (Solana, September 2026).
 | Path | What it does |
 |---|---|
 | `src/server/ingest/house.ts` | House Clerk yearly index: new PTRs, member photos and party |
-| `src/server/agent/read-ptr.ts` | Claude reads a PTR PDF into structured trades |
+| `src/server/agent/read-ptr.ts` | Sarvam AI reads a PTR PDF (text layer or OCR) into structured trades |
 | `src/server/ingest/sec.ts` | EDGAR Form 4: open-market insider purchases in tokenized stocks |
 | `src/server/registry.ts` | Ticker to xStock mint (US listings only) |
 | `src/server/prices.ts` | Pyth Hermes live prices and Benchmarks history, with Jupiter and Yahoo as keyless fallbacks |
@@ -62,7 +63,7 @@ account. Everything else is the same code.
 
 ```sh
 npm install
-cp .env.example .env        # ANTHROPIC_API_KEY, PYTH_API_KEY, SOLANA_RPC_URL
+cp .env.example .env        # SARVAM_API_KEY, PYTH_API_KEY, SOLANA_RPC_URL (blank = public devnet)
 npx drizzle-kit push        # creates data/coattails.db
 # agent key: keys/agent.json (Solana CLI format); fund it with devnet SOL at faucet.solana.com
 npx tsx --env-file=.env scripts/sync-index.ts 60     # House index
@@ -73,7 +74,7 @@ npx pm2 start ecosystem.config.cjs --only coattails-web,coattails-worker
 ## Stack
 
 Next.js 16, React 19, shadcn/ui, Tailwind v4, TanStack Query, Zustand, `@solana/kit` 8 with
-Wallet Standard, `@solana-program/*`, Drizzle on libSQL, Anthropic SDK (Claude Opus 5), Pyth
+Wallet Standard, `@solana-program/*`, Drizzle on libSQL, Sarvam AI SDK (`sarvam-105b`, Document Intelligence), unpdf, Pyth
 Hermes, Jupiter.
 
 ## Limits
