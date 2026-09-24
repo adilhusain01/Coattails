@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { strFromU8, unzipSync } from "fflate"
+import { PDFDocument } from "pdf-lib"
 import { SarvamAIClient } from "sarvamai"
 import { extractText, getDocumentProxy } from "unpdf"
 import { z } from "zod"
@@ -55,8 +56,8 @@ async function pdfText(pdf: Buffer) {
   return text.replace(/\u0000/g, "").trim()
 }
 
-/** OCR for scanned paper filings, through Sarvam Document Intelligence (markdown output). */
-async function ocr(pdf: Buffer) {
+/** OCR for up to 10 pages, through Sarvam Document Intelligence (markdown output). */
+async function ocrChunk(pdf: Uint8Array) {
   const dir = await mkdtemp(join(tmpdir(), "coattails-ptr-"))
   try {
     const input = join(dir, "filing.pdf")
@@ -87,6 +88,23 @@ function parseJson(content: string) {
   return JSON.parse(trimmed.slice(start, end + 1))
 }
 
+const OCR_MAX_PAGES = 10
+
+/** OCR for scanned paper filings. Document Intelligence takes 10 pages per job, so longer scans are split. */
+async function ocr(pdf: Buffer) {
+  const src = await PDFDocument.load(new Uint8Array(pdf), { ignoreEncryption: true })
+  const pages = src.getPageCount()
+  if (pages <= OCR_MAX_PAGES) return ocrChunk(new Uint8Array(pdf))
+  const parts: string[] = []
+  for (let start = 0; start < pages; start += OCR_MAX_PAGES) {
+    const chunk = await PDFDocument.create()
+    const indices = Array.from({ length: Math.min(OCR_MAX_PAGES, pages - start) }, (_, i) => start + i)
+    for (const page of await chunk.copyPages(src, indices)) chunk.addPage(page)
+    parts.push(await ocrChunk(await chunk.save()))
+  }
+  return parts.join("\n\n")
+}
+
 /** The filing's text: its text layer when e-filed, OCR when it is a paper scan. */
 export async function filingText(pdf: Buffer) {
   const text = await pdfText(pdf).catch(() => "")
@@ -102,7 +120,7 @@ export async function readPtr(pdf: Buffer): Promise<PtrExtraction> {
     {
       model: MODEL,
       temperature: 0,
-      max_tokens: 8000,
+      max_tokens: 16000,
       // Transcription needs no reasoning; with it off a filing reads in seconds instead of minutes.
       reasoning_effort: null as unknown as undefined,
       response_format: {
