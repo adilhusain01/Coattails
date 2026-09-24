@@ -125,7 +125,7 @@ export async function leaderboard(): Promise<LeaderRow[]> {
     db.query.sources.findMany(),
     db.query.filings.findMany({ where: inArray(schema.filings.status, ["parsed", "receipted"]) }),
     db.query.trades.findMany(),
-    db.query.follows.findMany({ where: eq(schema.follows.active, true) }),
+    db.query.follows.findMany({ where: and(eq(schema.follows.active, true), eq(schema.follows.demo, false)) }),
   ])
   const prices = await livePrices(trades.filter((t) => t.tokenSymbol && t.ticker).map((t) => t.ticker!))
   const rows: LeaderRow[] = []
@@ -164,7 +164,10 @@ export async function sourceProfile(slug: string) {
     where: and(eq(schema.filings.sourceId, s.id), inArray(schema.filings.status, ["parsed", "receipted"])),
     orderBy: desc(schema.filings.filedAt),
   })
-  const followers = await db.$count(schema.follows, and(eq(schema.follows.sourceId, s.id), eq(schema.follows.active, true)))
+  const followers = await db.$count(
+    schema.follows,
+    and(eq(schema.follows.sourceId, s.id), eq(schema.follows.active, true), eq(schema.follows.demo, false)),
+  )
   return { source: sourceView(s), filings: await filingViews(filings), followers }
 }
 

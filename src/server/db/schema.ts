@@ -89,6 +89,8 @@ export const follows = sqliteTable(
     trailingStopPct: real("trailing_stop_pct").default(0.15),
     /** Sell when a position has been held this many days without a disclosed sale. Null = off. */
     maxHoldDays: integer("max_hold_days").default(90),
+    /** A /demo run's follow: driven by the demo engine, never by the worker. */
+    demo: integer("demo", { mode: "boolean" }).notNull().default(false),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     approveSig: text("approve_sig"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

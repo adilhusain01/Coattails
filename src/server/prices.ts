@@ -216,3 +216,30 @@ async function yahooClose(ticker: string, date: Date): Promise<number | null> {
   for (let i = closes.length - 1; i >= 0; i--) if (closes[i] != null) return closes[i]
   return null
 }
+
+export type DailyClose = { date: string; close: number }
+
+/** Daily closes of the underlying from `from` to `to` (inclusive), oldest first. Source: Yahoo chart API. */
+export async function dailyCloses(ticker: string, from: Date, to = new Date()): Promise<DailyClose[]> {
+  const start = new Date(from)
+  start.setUTCHours(0, 0, 0, 0)
+  const p1 = Math.floor(start.getTime() / 1000)
+  const p2 = Math.floor(to.getTime() / 1000) + 86400
+  const res = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${ticker.replace(".", "-")}?period1=${p1}&period2=${p2}&interval=1d`,
+    { headers: { "User-Agent": "Mozilla/5.0 (Coattails)" } },
+  )
+  if (!res.ok) throw new Error(`Price history ${res.status} for ${ticker}`)
+  const body = (await res.json()) as {
+    chart: { result?: { timestamp?: number[]; indicators: { quote: { close: (number | null)[] }[] } }[] }
+  }
+  const r = body.chart.result?.[0]
+  const ts = r?.timestamp ?? []
+  const closes = r?.indicators.quote[0]?.close ?? []
+  const out: DailyClose[] = []
+  ts.forEach((t, i) => {
+    const c = closes[i]
+    if (c != null) out.push({ date: new Date(t * 1000).toISOString().slice(0, 10), close: c })
+  })
+  return out
+}

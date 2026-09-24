@@ -90,7 +90,7 @@ export async function writeReceipts(limit = 5) {
   }
 }
 
-async function recordExecution(row: typeof schema.executions.$inferInsert) {
+export async function recordExecution(row: typeof schema.executions.$inferInsert) {
   await db.insert(schema.executions).values(row).onConflictDoNothing()
 }
 
@@ -119,6 +119,7 @@ async function mirrorTrade(trade: schema.Trade, filing: schema.Filing) {
     where: and(
       eq(schema.follows.sourceId, trade.sourceId),
       eq(schema.follows.active, true),
+      eq(schema.follows.demo, false),
       lte(schema.follows.createdAt, trade.createdAt),
     ),
   })
@@ -216,7 +217,7 @@ export async function mirror(limit = 10) {
 // Each position carries its own exits, checked against live prices every tick: a trailing stop
 // from the highest price seen, and a maximum holding period.
 
-async function openPosition(opts: { follow: schema.Follow; trade: schema.Trade; symbol: string; tokens: number; usd: number; price: number }) {
+export async function openPosition(opts: { follow: schema.Follow; trade: schema.Trade; symbol: string; tokens: number; usd: number; price: number }) {
   const existing = await db.query.positions.findFirst({
     where: and(eq(schema.positions.followId, opts.follow.id), eq(schema.positions.tokenSymbol, opts.symbol), eq(schema.positions.status, "open")),
   })
@@ -244,7 +245,7 @@ async function openPosition(opts: { follow: schema.Follow; trade: schema.Trade; 
   })
 }
 
-async function closePosition(p: schema.Position, reason: NonNullable<schema.Position["closeReason"]>, price: number, sig: string) {
+export async function closePosition(p: schema.Position, reason: NonNullable<schema.Position["closeReason"]>, price: number, sig: string) {
   await db
     .update(schema.positions)
     .set({ status: "closed", closeReason: reason, closePx: price, closeSig: sig, closedAt: new Date(), exitDue: null, lastPx: price })
@@ -255,7 +256,7 @@ async function markExitDue(p: schema.Position, why: string) {
   if (p.exitDue !== why) await db.update(schema.positions).set({ exitDue: why }).where(eq(schema.positions.id, p.id))
 }
 
-function exitReason(p: schema.Position, f: schema.Follow, price: number) {
+export function exitReason(p: schema.Position, f: schema.Follow, price: number) {
   if (f.trailingStopPct && price <= p.peakPx * (1 - f.trailingStopPct)) {
     return { rule: "trailing_stop" as const, text: `Trailing stop: ${(((p.peakPx - price) / p.peakPx) * 100).toFixed(1)}% below the $${p.peakPx.toFixed(2)} peak` }
   }
@@ -270,7 +271,9 @@ export async function guardExits() {
   const open = await db.query.positions.findMany({ where: eq(schema.positions.status, "open") })
   if (!open.length) return
   const prices = await livePrices(open.map((p) => p.ticker))
-  const follows = await db.query.follows.findMany({ where: inArray(schema.follows.id, [...new Set(open.map((p) => p.followId))]) })
+  const follows = await db.query.follows.findMany({
+    where: and(inArray(schema.follows.id, [...new Set(open.map((p) => p.followId))]), eq(schema.follows.demo, false)),
+  })
   const followById = new Map(follows.map((f) => [f.id, f]))
 
   for (const p of open) {

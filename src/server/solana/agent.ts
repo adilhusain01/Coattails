@@ -76,9 +76,22 @@ export async function agentAddress() {
   return (await agentClient()).payer.address
 }
 
+/** Public RPC endpoints throttle (HTTP 429). Retry those with backoff; rethrow everything else. */
+export async function withRetry<T>(fn: () => Promise<T>, attempts = 6): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn()
+    } catch (err) {
+      const text = `${err instanceof Error ? err.message : err} ${JSON.stringify((err as { context?: unknown })?.context ?? "")} ${String((err as { cause?: unknown })?.cause ?? "")}`
+      if (i >= attempts - 1 || !/429|Too Many Requests|rate limit/i.test(text)) throw err
+      await new Promise((r) => setTimeout(r, 1500 * 2 ** i))
+    }
+  }
+}
+
 async function send(instructions: Instruction[]) {
   const client = await agentClient()
-  const result = await client.sendTransaction(instructions)
+  const result = await withRetry(() => client.sendTransaction(instructions))
   return result.context.signature as string
 }
 
@@ -208,7 +221,7 @@ const pending = (gp.coattailsPending ??= new Map())
 
 async function unsignedForWallet(owner: Address, instructions: Instruction[]) {
   const client = await agentClient()
-  const { value: blockhash } = await client.rpc.getLatestBlockhash().send()
+  const { value: blockhash } = await withRetry(() => client.rpc.getLatestBlockhash().send())
   const message = pipe(
     createTransactionMessage({ version: 0 }),
     (m) => setTransactionMessageFeePayer(client.payer.address, m),
@@ -284,10 +297,26 @@ export async function cosignAndSend(owner: Address, signedWire: string) {
   pending.delete(owner)
   const client = await agentClient()
   const signed = await partiallySignTransaction([client.payer.keyPair], tx)
-  const sig = await client.rpc
-    .sendTransaction(getBase64EncodedWireTransaction(signed), { encoding: "base64", preflightCommitment: "confirmed" })
-    .send()
+  const sig = await withRetry(() =>
+    client.rpc.sendTransaction(getBase64EncodedWireTransaction(signed), { encoding: "base64", preflightCommitment: "confirmed" }).send(),
+  )
   return sig as string
+}
+
+/** Waits until a signature is confirmed; throws if the transaction failed. */
+export async function confirm(sig: string, timeoutMs = 60_000) {
+  const client = await agentClient()
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const { value } = await withRetry(() =>
+      client.rpc.getSignatureStatuses([sig as Parameters<typeof client.rpc.getSignatureStatuses>[0][number]]).send(),
+    )
+    const status = value[0]
+    if (status?.err) throw new Error(`Transaction failed: ${JSON.stringify(status.err)}`)
+    if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") return
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+  throw new Error("Timed out waiting for confirmation")
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -296,7 +325,8 @@ export async function cosignAndSend(owner: Address, signedWire: string) {
 export async function usdcAllowance(owner: Address) {
   const client = await agentClient()
   const mint = await usdcMint()
-  const account = await t22.fetchMaybeToken(client.rpc, await ata(owner, mint))
+  const tokenAccount = await ata(owner, mint)
+  const account = await withRetry(() => t22.fetchMaybeToken(client.rpc, tokenAccount))
   if (!account.exists) return { balance: 0, allowance: 0 }
   const d = account.data
   const agent = client.payer.address
@@ -388,7 +418,8 @@ export async function fillBuy(opts: {
 /** The follower's balance of a stock token, in tokens. */
 export async function stockBalance(owner: Address, stock: Address) {
   const client = await agentClient()
-  const account = await t22.fetchMaybeToken(client.rpc, await ata(owner, stock, t22.TOKEN_2022_PROGRAM_ADDRESS))
+  const tokenAccount = await ata(owner, stock, t22.TOKEN_2022_PROGRAM_ADDRESS)
+  const account = await withRetry(() => t22.fetchMaybeToken(client.rpc, tokenAccount))
   if (!account.exists) return { tokens: 0, delegatedToAgent: 0 }
   const d = account.data
   const delegated = d.delegate.__option === "Some" && d.delegate.value === client.payer.address ? d.delegatedAmount : 0n
