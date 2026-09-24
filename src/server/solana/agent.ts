@@ -52,7 +52,7 @@ const rpcUrl =
 
 async function loadAgent(): Promise<KeyPairSigner> {
   const path = process.env.AGENT_KEYPAIR_PATH ?? "keys/agent.json"
-  const bytes = new Uint8Array(JSON.parse(readFileSync(path, "utf8")) as number[])
+  const bytes = new Uint8Array(JSON.parse(readFileSync(/* turbopackIgnore: true */ path, "utf8")) as number[])
   return createKeyPairSignerFromBytes(bytes)
 }
 
