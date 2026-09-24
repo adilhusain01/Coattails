@@ -206,7 +206,7 @@ export default async function Landing() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="/app/p/nancy-pelosi">See Pelosi&apos;s trades</Link>
+                <Link href="/app/demo">Watch the live demo</Link>
               </Button>
             </div>
             <p className="text-sm text-muted-foreground">

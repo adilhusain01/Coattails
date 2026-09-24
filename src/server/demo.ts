@@ -171,7 +171,9 @@ async function findPlans(): Promise<Partial<Record<ScenarioKey, Plan>>> {
     if (closes.length < 5) continue
     const hit = stopTriggerIndex(closes, 0.1)
     if (hit > 0) {
-      const saved = closes[hit].close / closes.at(-1)!.close - 1
+      // How much further the stock fell after the stop sold: the drop the follower avoided.
+      const after = closes.slice(hit + 1).map((c) => c.close)
+      const saved = after.length ? 1 - Math.min(...after) / closes[hit].close : 0
       if (!stopBest || saved > stopBest.saved) stopBest = { plan: { source: b.source, buyFiling: b.filing, buys: [b.trade], closes }, saved }
     } else if (!plans.time_limit && daysBetween(closes[0].date, closes.at(-1)!.date) >= 30) {
       plans.time_limit = { source: b.source, buyFiling: b.filing, buys: [b.trade], closes }
@@ -471,13 +473,17 @@ async function runTrailingStop(run: DemoRun, plan: Plan) {
   await playAfter(run, closes, hit)
   const today = closes.at(-1)!
   const heldPct = today.close / closes[0].close - 1
+  const rest = closes.slice(hit + 1)
+  const low = rest.length ? rest.reduce((m, c) => (c.close < m.close ? c : m)) : null
   run.summary = {
     pnlUsd: out.pnl,
     pnlPct: out.pct,
     lines: [
-      `Sold on ${closes[hit].date} for ${out.pnl >= 0 ? "+" : "-"}$${Math.abs(out.pnl).toFixed(2)} (${(out.pct * 100).toFixed(1)}%).`,
-      `Holding to ${today.date} instead would have been ${(heldPct * 100).toFixed(1)}%.`,
-      `No report of a sale was needed.`,
+      `Sold on ${closes[hit].date} for ${out.pnl >= 0 ? "+" : "-"}$${Math.abs(out.pnl).toFixed(2)} (${(out.pct * 100).toFixed(1)}%), without waiting for a report.`,
+      ...(low && low.close < exitPx
+        ? [`After the sale ${buy.ticker} fell as low as $${low.close.toFixed(2)} on ${low.date}, ${(((exitPx - low.close) / exitPx) * 100).toFixed(1)}% under the exit.`]
+        : []),
+      `Holding to ${today.date} instead would have returned ${(heldPct * 100).toFixed(1)}%.`,
     ],
   }
 }
