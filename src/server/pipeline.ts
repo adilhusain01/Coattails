@@ -3,7 +3,7 @@
  * Each step is idempotent and picks up where the last run stopped.
  */
 import { address } from "@solana/kit"
-import { and, asc, desc, eq, inArray, isNull, lte } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNull, lt, lte } from "drizzle-orm"
 import { db, schema } from "./db"
 import { readHouseFiling, syncHouseIndex } from "./ingest/house"
 import { syncForm4 } from "./ingest/sec"
@@ -90,6 +90,20 @@ async function mirrorTrade(trade: schema.Trade, filing: schema.Filing) {
   const token = trade.tokenSymbol ? tokenBySymbol(trade.tokenSymbol) : null
   if (!token || !trade.ticker) {
     await db.update(schema.trades).set({ mirrorStatus: "skipped" }).where(eq(schema.trades.id, trade.id))
+    return
+  }
+  // A filing often lists several lots of the same stock (shares and calls, several dates).
+  // Followers get one mirror per stock and direction per filing: the lowest-id lot carries it.
+  const sibling = await db.query.trades.findFirst({
+    where: and(
+      eq(schema.trades.filingId, trade.filingId),
+      eq(schema.trades.tokenSymbol, token.symbol),
+      eq(schema.trades.side, trade.side),
+      lt(schema.trades.id, trade.id),
+    ),
+  })
+  if (sibling) {
+    await db.update(schema.trades).set({ mirrorStatus: "done" }).where(eq(schema.trades.id, trade.id))
     return
   }
   const followers = await db.query.follows.findMany({
