@@ -324,10 +324,20 @@ export async function guardExits() {
   }
 }
 
-export async function tick() {
+/** Slow loop: pull new filings and read them. EDGAR and the House index are polled politely. */
+export async function ingestTick() {
   await ingest().catch((e) => log("ingest failed", e))
   if (process.env.SARVAM_API_KEY) await readFilings()
-  await writeReceipts()
-  await mirror()
+}
+
+/** Fast loop: receipts, mirrors and exits. Kept separate so a slow ingest never delays an exit. */
+export async function tradeTick() {
+  await writeReceipts().catch((e) => log("receipts failed", e))
+  await mirror().catch((e) => log("mirror failed", e))
   await guardExits().catch((e) => log("exits failed", e))
+}
+
+export async function tick() {
+  await ingestTick()
+  await tradeTick()
 }

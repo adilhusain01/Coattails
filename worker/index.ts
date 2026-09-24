@@ -1,19 +1,20 @@
-import { tick } from "../src/server/pipeline"
+import { ingestTick, tradeTick } from "../src/server/pipeline"
 
-const INTERVAL_MS = Number(process.env.WORKER_INTERVAL_MS ?? 60_000)
 const once = process.argv.includes("--once")
 
-async function main() {
+/** Runs `fn` every `intervalMs`, never overlapping itself. */
+async function loop(name: string, fn: () => Promise<void>, intervalMs: number) {
   do {
     const started = Date.now()
     try {
-      await tick()
+      await fn()
     } catch (err) {
-      console.error(new Date().toISOString(), "tick failed", err)
+      console.error(new Date().toISOString(), `${name} failed`, err)
     }
     if (once) break
-    await new Promise((r) => setTimeout(r, Math.max(5_000, INTERVAL_MS - (Date.now() - started))))
+    await new Promise((r) => setTimeout(r, Math.max(2_000, intervalMs - (Date.now() - started))))
   } while (true)
 }
 
-main()
+loop("ingest", ingestTick, Number(process.env.INGEST_INTERVAL_MS ?? 60_000))
+loop("trade", tradeTick, Number(process.env.TRADE_INTERVAL_MS ?? 20_000))
