@@ -96,9 +96,13 @@ export async function syncHouseIndex(limit = 40) {
   return added
 }
 
+/** Accepts YYYY-MM-DD and the form's own MM/DD/YYYY (or M/D/YY). */
 function isoDate(s: string | null) {
   if (!s) return null
-  const d = new Date(`${s}T00:00:00Z`)
+  const us = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/)
+  const d = us
+    ? new Date(Date.UTC(Number(us[3].length === 2 ? `20${us[3]}` : us[3]), Number(us[1]) - 1, Number(us[2])))
+    : new Date(`${s.trim().slice(0, 10)}T00:00:00Z`)
   return Number.isNaN(d.getTime()) ? null : d
 }
 

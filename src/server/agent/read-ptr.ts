@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { strFromU8, unzipSync } from "fflate"
 import { SarvamAIClient } from "sarvamai"
 import { extractText, getDocumentProxy } from "unpdf"
 import { z } from "zod"
@@ -64,15 +65,13 @@ async function ocr(pdf: Buffer) {
     await job.uploadFile(input)
     await job.start()
     await job.waitUntilComplete()
-    const out = await job.downloadOutput(join(dir, "out"))
-    return await readFile(out, "utf8").catch(async () => {
-      // downloadOutput may return a directory or zip path depending on SDK version.
-      const { readdir } = await import("node:fs/promises")
-      const files = await readdir(join(dir, "out"), { recursive: true })
-      const md = files.find((f) => String(f).endsWith(".md"))
-      if (!md) throw new Error("Document Intelligence returned no markdown")
-      return readFile(join(dir, "out", String(md)), "utf8")
-    })
+    const out = await job.downloadOutput(join(dir, "out.zip"))
+    // The output is a zip holding document.md plus per-page layout JSON.
+    const bytes = new Uint8Array(await readFile(out))
+    const files = unzipSync(bytes)
+    const md = Object.keys(files).find((f) => f.endsWith(".md"))
+    if (!md) throw new Error("Document Intelligence returned no markdown")
+    return strFromU8(files[md])
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -88,29 +87,35 @@ function parseJson(content: string) {
   return JSON.parse(trimmed.slice(start, end + 1))
 }
 
+/** The filing's text: its text layer when e-filed, OCR when it is a paper scan. */
+export async function filingText(pdf: Buffer) {
+  const text = await pdfText(pdf).catch(() => "")
+  if (text.length >= 200) return { text, readBy: "sarvam" }
+  return { text: await ocr(pdf), readBy: "sarvam+ocr" }
+}
+
 /** Reads one PTR PDF into structured transactions. */
 export async function readPtr(pdf: Buffer): Promise<PtrExtraction> {
-  let text = await pdfText(pdf).catch(() => "")
-  let readBy = "sarvam"
-  if (text.length < 200) {
-    text = await ocr(pdf)
-    readBy = "sarvam+ocr"
-  }
+  const { text, readBy } = await filingText(pdf)
 
-  const response = await sarvam().chat.completions({
-    model: MODEL,
-    temperature: 0,
-    max_tokens: 8000,
-    reasoning_effort: "low",
-    response_format: {
-      type: "json_schema",
-      json_schema: { name: "ptr", schema: z.toJSONSchema(PtrDoc) as Record<string, unknown>, strict: true },
+  const response = await sarvam().chat.completions(
+    {
+      model: MODEL,
+      temperature: 0,
+      max_tokens: 8000,
+      // Transcription needs no reasoning; with it off a filing reads in seconds instead of minutes.
+      reasoning_effort: null as unknown as undefined,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "ptr", schema: z.toJSONSchema(PtrDoc) as Record<string, unknown>, strict: true },
+      },
+      messages: [
+        { role: "system", content: SYSTEM },
+        { role: "user", content: `Periodic Transaction Report text:\n\n${text.slice(0, 60_000)}` },
+      ],
     },
-    messages: [
-      { role: "system", content: SYSTEM },
-      { role: "user", content: `Periodic Transaction Report text:\n\n${text.slice(0, 60_000)}` },
-    ],
-  })
+    { timeoutInSeconds: 180, maxRetries: 1 },
+  )
   const choice = response.choices[0]
   if (choice.finish_reason === "length") throw new Error("Sarvam ran out of tokens reading the filing")
   const content = choice.message.content

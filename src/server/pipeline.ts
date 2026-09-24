@@ -20,7 +20,7 @@ let lastForm4 = 0
 const FORM4_EVERY_MS = 10 * 60_000
 
 export async function ingest() {
-  const added = await syncHouseIndex(Number(process.env.HOUSE_INDEX_WINDOW ?? 40))
+  const added = await syncHouseIndex(Number(process.env.HOUSE_INDEX_WINDOW ?? 1000))
   if (added) log(`index: ${added} new filings`)
   if (Date.now() - lastForm4 > FORM4_EVERY_MS) {
     lastForm4 = Date.now()
@@ -29,12 +29,23 @@ export async function ingest() {
   }
 }
 
-export async function readFilings(limit = 3) {
-  const queue = await db.query.filings.findMany({
-    where: eq(schema.filings.status, "new"),
-    orderBy: desc(schema.filings.filedAt),
-    limit,
-  })
+/** Members read first: the names people already search for. */
+const WATCHLIST = (process.env.HOUSE_WATCHLIST ?? "pelosi,khanna,gottheimer,mccaul,greene,crenshaw,tuberville")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean)
+
+export async function readFilings(limit = 5) {
+  const pending = await db
+    .select({ filing: schema.filings, name: schema.sources.name })
+    .from(schema.filings)
+    .innerJoin(schema.sources, eq(schema.sources.id, schema.filings.sourceId))
+    .where(eq(schema.filings.status, "new"))
+    .orderBy(desc(schema.filings.filedAt))
+  const watched = (n: string) => WATCHLIST.some((w) => n.toLowerCase().includes(w))
+  const queue = [...pending.filter((p) => watched(p.name)), ...pending.filter((p) => !watched(p.name))]
+    .slice(0, limit)
+    .map((p) => p.filing)
   await Promise.all(
     queue.map(async (f) => {
       try {
