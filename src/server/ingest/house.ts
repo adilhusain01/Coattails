@@ -107,10 +107,16 @@ function isoDate(s: string | null) {
 }
 
 /** Which trades Coattails mirrors: stock trades, and call options read as a view on the stock. */
+function assetCode(line: PtrExtraction["transactions"][number]) {
+  const code = line.assetType.replace(/[^a-z]/gi, "").toUpperCase()
+  return code.startsWith("OPTION") ? "OP" : code.startsWith("STOCK") ? "ST" : code
+}
+
 function mirrorable(line: PtrExtraction["transactions"][number]) {
   if (line.side === "exchange") return false
-  if (line.assetType === "ST") return true
-  if (line.assetType === "OP") return !/\bput/i.test(line.description ?? "")
+  const code = assetCode(line)
+  if (code === "ST") return true
+  if (code === "OP") return !/\bput/i.test(line.description ?? "")
   return false
 }
 
@@ -127,12 +133,13 @@ export async function readHouseFiling(filing: schema.Filing) {
     if (line.side === "exchange") continue
     const tradedAt = isoDate(line.tradeDate)
     if (!tradedAt) continue
-    const token = mirrorable(line) ? tokenForTicker(line.ticker) : null
+    const ticker = line.ticker?.trim().toUpperCase() || null
+    const token = mirrorable(line) ? tokenForTicker(ticker) : null
     rows.push({
       filingId: filing.id,
       sourceId: filing.sourceId,
-      ticker: line.ticker,
-      assetName: line.assetType === "OP" && line.description ? `${line.assetName} (${line.description})` : line.assetName,
+      ticker,
+      assetName: assetCode(line) === "OP" && line.description ? `${line.assetName} (${line.description})` : line.assetName,
       side: line.side,
       amountLow: line.amountLow,
       amountHigh: line.amountHigh,
@@ -154,10 +161,19 @@ export async function readHouseFiling(filing: schema.Filing) {
     }),
   )
 
-  if (rows.length) await db.insert(schema.trades).values(rows)
-  await db
-    .update(schema.filings)
-    .set({ sha256, status: "parsed", readBy: doc.readBy, error: doc.legible ? null : "Partly illegible scan" })
-    .where(eq(schema.filings.id, filing.id))
+  // One transaction, replacing any rows from an interrupted earlier read.
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.trades).where(eq(schema.trades.filingId, filing.id))
+    if (rows.length) await tx.insert(schema.trades).values(rows)
+    await tx
+      .update(schema.filings)
+      .set({
+        sha256,
+        status: filing.receiptSig ? "receipted" : "parsed",
+        readBy: doc.readBy,
+        error: doc.legible ? null : "Partly illegible scan",
+      })
+      .where(eq(schema.filings.id, filing.id))
+  })
   return rows.length
 }
