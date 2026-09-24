@@ -1,7 +1,8 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  serverExternalPackages: ["@libsql/client", "libsql"],
+  images: { remotePatterns: [{ hostname: "unitedstates.github.io" }] },
+}
 
-export default nextConfig;
+export default nextConfig
