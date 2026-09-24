@@ -24,6 +24,19 @@ Built for the Stocklana hackathon (Solana, September 2026).
    follower's own token account. Each fill is checked against the live Pyth price, and its memo
    points back to the filing receipt.
 
+## Exits
+
+Reports arrive late, so a member can sell weeks before anyone sees it. Every position bought
+through Coattails carries its own exit rules, set when you start following someone and checked
+against the live price every 20 seconds:
+
+- a trailing stop (10%, 15% or 25% below the highest price since purchase, or off)
+- a time limit (30, 90 or 180 days without a reported sale, or off)
+- a reported sale by the member sells only what was bought from that member
+
+Selling needs one extra signature per stock: an allowance on that stock account only. The
+portfolio asks for it as soon as a position exists without it.
+
 ## Why Solana
 
 - **Global.** A wallet works in any country. A brokerage account does not.
@@ -46,8 +59,10 @@ Built for the Stocklana hackathon (Solana, September 2026).
 | `src/server/registry.ts` | Ticker to xStock mint (US listings only) |
 | `src/server/prices.ts` | Pyth Hermes live prices and Benchmarks history, with Jupiter and Yahoo as keyless fallbacks |
 | `src/server/solana/agent.ts` | Agent key: receipts, gasless follow (agent pays fees), fills, revoke |
-| `src/server/pipeline.ts`, `worker/index.ts` | The loop: ingest, read, receipt, mirror |
-| `src/app/api/actions/*`, `src/app/actions.json` | Solana Actions: share `/p/<member>` and it unfolds as a "Mirror" Blink |
+| `src/server/pipeline.ts`, `worker/index.ts` | Two loops: ingest and read every minute; receipts, mirrors and exits every 20 seconds |
+| `scripts/e2e.ts` | Devnet end-to-end: faucet, gasless follow, mirrored buys, allow selling, trailing-stop exit |
+| `src/app/page.tsx` | Landing page; the app lives under `/app` |
+| `src/app/api/actions/*`, `src/app/actions.json` | Solana Actions: share `/app/p/<member>` and it unfolds as a "Mirror" Blink |
 | `docs/ARCHITECTURE.md` | Design and custody model |
 | `docs/INTEGRATIONS.md` | Verified API facts for every data source |
 

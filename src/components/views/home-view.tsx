@@ -81,9 +81,9 @@ export function HomeView(props: { filings: FilingView[]; leaders: LeaderRow[] })
                     <Link href={`/app/p/${m.slug}`} className="block truncate text-sm font-medium hover:underline">
                       {m.name}
                     </Link>
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <PartySeat source={m} />
-                      {m.lastFiledAt && <span className="text-xs text-muted-foreground">{shortDay(m.lastFiledAt)}</span>}
+                      {m.lastFiledAt && <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{shortDay(m.lastFiledAt)}</span>}
                     </div>
                   </div>
                   {m.copyReturn != null && (

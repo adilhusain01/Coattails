@@ -34,6 +34,15 @@ SEC EDGAR Form 4 feed ─┼─> ingest ─> Sarvam reads PDF ─> trades ─> m
    - Sells: if the follower holds the token and approved auto-sell, the agent sells it back to USDC
      into the follower's USDC account.
 
+## Exits
+
+Disclosures are late (House: up to 45 days), so positions protect themselves. `positions` tracks
+each follower's holding per member and stock with its entry and peak price. `guardExits` runs every
+20 seconds: it updates the peak from live prices and sells when the price is `trailingStopPct`
+below the peak or the position is older than `maxHoldDays`. A reported sale sells only the
+positions opened from that member. Selling uses a per-stock SPL allowance the follower grants once
+per stock (max amount, so later buys of the same stock are covered).
+
 ## Custody model
 
 No pooled funds and no custom program. A follower's "vault" is their own wallet:
