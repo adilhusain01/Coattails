@@ -10,9 +10,11 @@ import {
 } from "@solana/kit-plugin-wallet/react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -36,27 +38,31 @@ function WalletMenu() {
           <Button variant="outline" size="sm" className="font-mono tabular-nums">
             {connected.wallet.icon ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={connected.wallet.icon} alt="" className="size-4" />
+              <img src={connected.wallet.icon} alt="" width={16} height={16} data-icon="inline-start" className="size-4" />
             ) : (
-              <Wallet />
+              <Wallet data-icon="inline-start" />
             )}
             {shortAddress(address)}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel className="font-normal text-muted-foreground">{connected.wallet.name}</DropdownMenuLabel>
-          <DropdownMenuItem
-            onSelect={() => {
-              navigator.clipboard.writeText(address)
-              toast("Address copied")
-            }}
-          >
-            <Copy /> Copy address
-          </DropdownMenuItem>
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              onSelect={() => {
+                navigator.clipboard.writeText(address)
+                toast("Address copied")
+              }}
+            >
+              <Copy /> Copy address
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => disconnect()}>
-            <SignOut /> Disconnect
-          </DropdownMenuItem>
+          <DropdownMenuGroup>
+            <DropdownMenuItem onSelect={() => disconnect()}>
+              <SignOut /> Disconnect
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     )
@@ -68,8 +74,8 @@ function WalletMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button size="sm" disabled={busy}>
-          <Wallet />
-          {busy ? "Connecting" : "Connect wallet"}
+          {busy ? <Spinner data-icon="inline-start" /> : <Wallet data-icon="inline-start" />}
+          {busy ? "Connecting…" : "Connect wallet"}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
@@ -78,13 +84,15 @@ function WalletMenu() {
             No Solana wallet found. Install Phantom, Solflare or Backpack, then reload.
           </div>
         ) : (
-          wallets.map((w) => (
-            <DropdownMenuItem key={w.name} onSelect={() => connect(w)}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={w.icon} alt="" className="size-4" />
-              {w.name}
-            </DropdownMenuItem>
-          ))
+          <DropdownMenuGroup>
+            {wallets.map((w) => (
+              <DropdownMenuItem key={w.name} onSelect={() => connect(w)}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={w.icon} alt="" width={16} height={16} className="size-4" />
+                {w.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

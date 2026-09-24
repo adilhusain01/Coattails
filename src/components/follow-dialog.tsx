@@ -17,6 +17,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field"
+import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { CLUSTER, explorerTx } from "@/lib/cluster"
 import { usd } from "@/lib/format"
@@ -28,20 +30,36 @@ import type { SourceView } from "@/server/queries"
 
 const PER_TRADE = [5, 10, 25, 50]
 const BUDGET = [25, 50, 100, 250]
+const STOPS: (number | null)[] = [0.1, 0.15, 0.25, null]
+const HOLDS: (number | null)[] = [30, 90, 180, null]
 
-function Amounts({ value, options, onChange, label }: { value: number; options: number[]; onChange: (v: number) => void; label: string }) {
+/** A ToggleGroup over a fixed set of values, where null is the "Off" option. */
+function Choice<T extends number | null>({
+  id,
+  value,
+  options,
+  onChange,
+  format,
+}: {
+  id: string
+  value: T
+  options: T[]
+  onChange: (v: T) => void
+  format: (v: T) => string
+}) {
+  const key = (v: T) => (v === null ? "off" : String(v))
   return (
     <ToggleGroup
+      id={id}
       type="single"
       variant="outline"
-      value={String(value)}
-      onValueChange={(v) => v && onChange(Number(v))}
-      aria-label={label}
+      value={key(value)}
+      onValueChange={(v) => v && onChange((v === "off" ? null : Number(v)) as T)}
       className="w-full"
     >
       {options.map((o) => (
-        <ToggleGroupItem key={o} value={String(o)} className="flex-1 font-mono tabular-nums">
-          ${o}
+        <ToggleGroupItem key={key(o)} value={key(o)} className="flex-1 font-mono tabular-nums">
+          {format(o)}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
@@ -54,7 +72,7 @@ export function FollowButton({ source, size = "sm", label }: { source: SourceVie
   const wallet = connected?.account.address
   const me = useMe(wallet)
   const queryClient = useQueryClient()
-  const { perTradeUsd, budgetUsd, setPerTrade, setBudget } = useFollowPrefs()
+  const prefs = useFollowPrefs()
   const following = me.data?.follows.some((f) => f.source.slug === source.slug && f.active)
 
   const faucet = useMutation({
@@ -73,12 +91,18 @@ export function FollowButton({ source, size = "sm", label }: { source: SourceVie
         signer: connected.signer,
         wallet,
         buildPath: "/api/follow/build",
-        buildBody: { slug: source.slug, perTradeUsd, budgetUsd },
-        intent: { type: "follow", slug: source.slug, perTradeUsd },
+        buildBody: { slug: source.slug, perTradeUsd: prefs.perTradeUsd, budgetUsd: prefs.budgetUsd },
+        intent: {
+          type: "follow",
+          slug: source.slug,
+          perTradeUsd: prefs.perTradeUsd,
+          trailingStopPct: prefs.trailingStopPct,
+          maxHoldDays: prefs.maxHoldDays,
+        },
       })
     },
     onSuccess: (sig) => {
-      toast.success(`Following ${source.name}`, { action: { label: "View", onClick: () => window.open(explorerTx(sig)) } })
+      toast.success(`Mirroring ${source.name}`, { action: { label: "View", onClick: () => window.open(explorerTx(sig)) } })
       queryClient.invalidateQueries({ queryKey: keys.me(wallet!) })
       queryClient.invalidateQueries({ queryKey: keys.leaders })
       setOpen(false)
@@ -90,68 +114,93 @@ export function FollowButton({ source, size = "sm", label }: { source: SourceVie
   })
 
   const balance = me.data?.usdc.balance ?? 0
-  const needsFunds = !!wallet && me.isSuccess && balance < perTradeUsd
+  const needsFunds = !!wallet && me.isSuccess && balance < prefs.perTradeUsd
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size={size} variant={following ? "outline" : "default"}>
-          {following ? <CheckCircle weight="fill" className="text-buy" /> : null}
-          {following ? "Following" : (label ?? "Mirror")}
+          {following && <CheckCircle weight="fill" data-icon="inline-start" className="text-buy" />}
+          {following ? "Mirroring" : (label ?? "Mirror")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto overscroll-contain sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <MemberAvatar source={source} className="size-12" />
-            <div>
+            <div className="grid gap-0.5">
               <DialogTitle className="text-base">Mirror {source.name}</DialogTitle>
               <PartySeat source={source} />
             </div>
           </div>
           <DialogDescription className="pt-2 text-sm leading-relaxed">
-            When a new filing shows a buy of a tokenized stock, Coattails buys it for you with USDC from your wallet.
-            When it shows a sale, Coattails sells your position.
+            When a new report shows a purchase of a tokenized stock, Coattails buys it for you with USDC from your
+            wallet. Your exit rules decide when it sells.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-1">
-          <div className="grid gap-2">
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="font-medium">Per trade</span>
-              <span className="text-xs text-muted-foreground">spent on each mirrored buy</span>
-            </div>
-            <Amounts value={perTradeUsd} options={PER_TRADE} onChange={setPerTrade} label="Per trade amount" />
-          </div>
-          <div className="grid gap-2">
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="font-medium">Budget</span>
-              <span className="text-xs text-muted-foreground">most Coattails can ever spend</span>
-            </div>
-            <Amounts value={budgetUsd} options={BUDGET.filter((b) => b >= perTradeUsd)} onChange={setBudget} label="Total budget" />
-          </div>
-          <ul className="grid gap-1.5 border-l-2 border-stamp/40 pl-3 text-xs leading-relaxed text-muted-foreground">
-            <li>Your USDC stays in your wallet. You approve Coattails to spend up to {usd(budgetUsd, 0)} of it.</li>
-            <li>Bought stock lands in your own wallet, not ours. Revoke anytime from Portfolio or any wallet app.</li>
-            <li>Every fill is checked against the live Pyth price and links to the filing it copies.</li>
-            <li>Coattails pays the network fee. You need no SOL.</li>
-          </ul>
-        </div>
+        <FieldGroup className="gap-5">
+          <Field>
+            <FieldLabel htmlFor="per-trade">Per trade</FieldLabel>
+            <Choice id="per-trade" value={prefs.perTradeUsd} options={PER_TRADE} onChange={prefs.setPerTrade} format={(v) => `$${v}`} />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="budget">Budget</FieldLabel>
+            <Choice
+              id="budget"
+              value={prefs.budgetUsd}
+              options={BUDGET.filter((b) => b >= prefs.perTradeUsd)}
+              onChange={prefs.setBudget}
+              format={(v) => `$${v}`}
+            />
+            <FieldDescription>The most Coattails can ever spend from your USDC.</FieldDescription>
+          </Field>
+          <FieldSeparator />
+          <Field>
+            <FieldLabel htmlFor="trailing-stop">Trailing stop</FieldLabel>
+            <Choice
+              id="trailing-stop"
+              value={prefs.trailingStopPct}
+              options={STOPS}
+              onChange={prefs.setTrailingStop}
+              format={(v) => (v === null ? "Off" : `${Math.round(v * 100)}%`)}
+            />
+            <FieldDescription>Sell if the price falls this far below its highest point since you bought.</FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="max-hold">Time limit</FieldLabel>
+            <Choice
+              id="max-hold"
+              value={prefs.maxHoldDays}
+              options={HOLDS}
+              onChange={prefs.setMaxHold}
+              format={(v) => (v === null ? "Off" : `${v}d`)}
+            />
+            <FieldDescription>Sell after this many days if no sale has been reported.</FieldDescription>
+          </Field>
+        </FieldGroup>
+
+        <p className="border-l-2 border-stamp/40 pl-3 text-xs leading-relaxed text-muted-foreground">
+          Your USDC stays in your wallet and bought stock goes to your wallet. Coattails pays the network fees, and you
+          can revoke the allowance at any time.
+        </p>
 
         <DialogFooter className="gap-2 sm:justify-between">
           {!wallet ? (
-            <p className="text-sm text-muted-foreground">Connect a wallet from the top bar to continue.</p>
+            <p className="self-center text-sm text-muted-foreground">Connect a wallet from the top bar to continue.</p>
           ) : needsFunds && CLUSTER === "devnet" ? (
             <Button variant="outline" onClick={() => faucet.mutate()} disabled={faucet.isPending}>
-              <Drop /> {faucet.isPending ? "Sending test USDC" : "Get 100 test USDC"}
+              {faucet.isPending ? <Spinner data-icon="inline-start" /> : <Drop data-icon="inline-start" />}
+              Get 100 test USDC
             </Button>
           ) : (
-            <Link href="/me" className="self-center text-xs text-muted-foreground hover:text-foreground">
+            <Link href="/app/portfolio" className="self-center text-xs text-muted-foreground hover:text-foreground">
               Wallet: {usd(balance)} USDC
             </Link>
           )}
           <Button onClick={() => follow.mutate()} disabled={!wallet || follow.isPending || needsFunds}>
-            {follow.isPending ? "Waiting for wallet" : `Approve ${usd(budgetUsd, 0)} and mirror`}
+            {follow.isPending && <Spinner data-icon="inline-start" />}
+            {follow.isPending ? "Waiting for your wallet…" : `Approve ${usd(prefs.budgetUsd, 0)} and mirror`}
           </Button>
         </DialogFooter>
       </DialogContent>

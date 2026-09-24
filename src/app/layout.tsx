@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next"
 import { JetBrains_Mono, Public_Sans } from "next/font/google"
-import { SiteFooter } from "@/components/site-footer"
-import { SiteHeader } from "@/components/site-header"
 import { Providers } from "@/components/providers"
 import { cn } from "@/lib/utils"
 import "./globals.css"
@@ -26,11 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" suppressHydrationWarning className={cn("h-full antialiased", publicSans.variable, jetbrainsMono.variable)}>
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
-        <Providers>
-          <SiteHeader />
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 sm:px-6">{children}</main>
-          <SiteFooter />
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   )

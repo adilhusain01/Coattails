@@ -2,11 +2,11 @@ import { createActionHeaders, type ActionsJson } from "@solana/actions"
 
 const headers = createActionHeaders()
 
-/** Maps shareable profile links to their Blink, so /p/nancy-pelosi unfurls as "Mirror Pelosi". */
+/** Maps shareable profile links to their Blink, so /app/p/nancy-pelosi unfurls as "Mirror Pelosi". */
 export function GET() {
   const body: ActionsJson = {
     rules: [
-      { pathPattern: "/p/*", apiPath: "/api/actions/mirror/*" },
+      { pathPattern: "/app/p/*", apiPath: "/api/actions/mirror/*" },
       { pathPattern: "/api/actions/**", apiPath: "/api/actions/**" },
     ],
   }

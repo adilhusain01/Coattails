@@ -32,8 +32,39 @@ export function useSource(slug: string, initialData?: SourceProfile) {
   return useQuery({ queryKey: keys.source(slug), queryFn: () => api<SourceProfile>(`/api/source/${slug}`), initialData, refetchInterval: 30_000 })
 }
 
+export type PositionView = {
+  id: number
+  tokenSymbol: string
+  ticker: string
+  tokens: number
+  costUsd: number
+  entryPx: number
+  peakPx: number
+  lastPx: number | null
+  stopPx: number | null
+  sellBy: string | null
+  openedAt: string
+  status: "open" | "closed"
+  exitDue: string | null
+  closeReason: "member_sold" | "trailing_stop" | "max_hold" | "manual" | null
+  closePx: number | null
+  closeSig: string | null
+  source: SourceView | null
+  sellAllowed: boolean | null
+}
+
 export type WalletState = {
-  follows: { id: number; perTradeUsd: number; autoSell: boolean; active: boolean; createdAt: string; source: SourceView }[]
+  positions: PositionView[]
+  follows: {
+    id: number
+    perTradeUsd: number
+    trailingStopPct: number | null
+    maxHoldDays: number | null
+    autoSell: boolean
+    active: boolean
+    createdAt: string
+    source: SourceView
+  }[]
   executions: ExecutionView[]
   usdc: { balance: number; allowance: number; mint: string; cluster: string }
 }

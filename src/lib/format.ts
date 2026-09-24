@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, format } from "date-fns"
+import { differenceInCalendarDays } from "date-fns"
 
 export function shortAddress(address: string, chars = 4) {
   return `${address.slice(0, chars)}..${address.slice(-chars)}`
@@ -28,12 +28,17 @@ export function pct(value: number | null | undefined, digits = 1) {
   return `${value > 0 ? "+" : ""}${fixed}%`
 }
 
+// Filing and trade dates are calendar days stored at UTC midnight; format them in UTC so every
+// timezone (and the server render) shows the same day.
+const dayFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
+const shortDayFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+
 export function day(date: Date | number | string) {
-  return format(new Date(date), "MMM d, yyyy")
+  return dayFmt.format(new Date(date))
 }
 
 export function shortDay(date: Date | number | string) {
-  return format(new Date(date), "MMM d")
+  return shortDayFmt.format(new Date(date))
 }
 
 /** Days between the trade and its public disclosure. */

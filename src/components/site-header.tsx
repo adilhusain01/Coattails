@@ -8,10 +8,10 @@ import { CLUSTER } from "@/lib/cluster"
 import { cn } from "@/lib/utils"
 
 const NAV = [
-  { href: "/", label: "Filings" },
-  { href: "/members", label: "People" },
-  { href: "/receipts", label: "Receipts" },
-  { href: "/me", label: "Portfolio" },
+  { href: "/app", label: "Filings" },
+  { href: "/app/people", label: "People" },
+  { href: "/app/receipts", label: "Receipts" },
+  { href: "/app/portfolio", label: "Portfolio" },
 ]
 
 export function SiteHeader() {
@@ -27,7 +27,7 @@ export function SiteHeader() {
         </Link>
         <nav className="hidden items-center gap-1 md:flex">
           {NAV.map((item) => {
-            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
+            const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href)
             return (
               <Link
                 key={item.href}
@@ -49,7 +49,7 @@ export function SiteHeader() {
       </div>
       <nav className="flex border-t md:hidden">
         {NAV.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
+          const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href)
           return (
             <Link
               key={item.href}

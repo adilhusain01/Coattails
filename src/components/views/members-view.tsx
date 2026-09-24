@@ -50,7 +50,7 @@ export function MembersView(props: { leaders: LeaderRow[] }) {
                   <div className="flex items-center gap-3">
                     <MemberAvatar source={m} className="size-8" />
                     <div className="min-w-0">
-                      <Link href={`/p/${m.slug}`} className="block truncate text-sm font-medium hover:underline">
+                      <Link href={`/app/p/${m.slug}`} className="block truncate text-sm font-medium hover:underline">
                         {m.name}
                       </Link>
                       <div className="flex items-center gap-2">

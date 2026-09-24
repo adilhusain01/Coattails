@@ -1,5 +1,6 @@
 import { ArrowSquareOut, Seal } from "@phosphor-icons/react/dist/ssr"
 import Link from "next/link"
+import { Badge } from "@/components/ui/badge"
 import { MemberAvatar, PartySeat } from "@/components/member-avatar"
 import { explorerTx } from "@/lib/cluster"
 import { amountRange, day, lagDays, pct, shortDay, usd } from "@/lib/format"
@@ -19,14 +20,48 @@ function Move({ from, to, label }: { from: number | null; to: number | null; lab
   )
 }
 
-function TradeLine({ trade }: { trade: TradeView }) {
+/** Option lots carry their contract details in parentheses; the compact row drops them. */
+function shortAsset(name: string) {
+  return name.replace(/\s*\((Purchased|Sold|Exercised)[^)]*\)\s*$/i, "").replace(/\s*-\s*Common Stock$/i, "")
+}
+
+function TradeLine({ trade, compact }: { trade: TradeView; compact: boolean }) {
   const lag = lagDays(trade.tradedAt, trade.disclosedAt)
   const mirrored = !!trade.tokenSymbol
+  const side = (
+    <span className={cn("font-mono text-xs font-semibold uppercase", trade.side === "buy" ? "text-buy" : "text-sell")}>
+      {trade.side === "buy" ? "Buy" : "Sell"}
+    </span>
+  )
+  const move = mirrored ? (
+    <Move from={trade.pxTraded} to={trade.pxDisclosed} label="Move between the trade and its disclosure: the part a copier cannot capture" />
+  ) : (
+    <span className="text-muted-foreground">not tokenized</span>
+  )
+
+  if (compact) {
+    return (
+      <li className="grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5 px-4 py-2.5 odd:bg-bar sm:px-5">
+        {side}
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="font-mono text-sm font-semibold">{trade.ticker ?? "-"}</span>
+          {/call option/i.test(trade.assetName) && <Badge variant="outline">calls</Badge>}
+          <span className="truncate text-xs text-muted-foreground">{shortAsset(trade.assetName)}</span>
+        </span>
+        <span className="text-right font-mono text-xs tabular-nums">{amountRange(trade.amountLow, trade.amountHigh)}</span>
+        <span className="col-start-2 col-end-4 flex flex-wrap items-baseline justify-between gap-x-4 font-mono text-xs tabular-nums">
+          <span className="text-muted-foreground">
+            {shortDay(trade.tradedAt)}, filed {lag}d later
+          </span>
+          {move}
+        </span>
+      </li>
+    )
+  }
+
   return (
     <li className="grid grid-cols-[3.25rem_1fr_auto] items-baseline gap-x-3 gap-y-1 px-4 py-2.5 odd:bg-bar sm:grid-cols-[3.25rem_minmax(0,1.4fr)_7rem_minmax(0,1.6fr)] sm:px-5">
-      <span className={cn("font-mono text-xs font-semibold uppercase", trade.side === "buy" ? "text-buy" : "text-sell")}>
-        {trade.side === "buy" ? "Buy" : "Sell"}
-      </span>
+      {side}
       <span className="min-w-0">
         <span className="mr-2 font-mono text-sm font-semibold">{trade.ticker ?? "-"}</span>
         <span className="text-xs text-muted-foreground">{trade.assetName}</span>
@@ -36,11 +71,7 @@ function TradeLine({ trade }: { trade: TradeView }) {
         <span className="text-muted-foreground">
           traded {shortDay(trade.tradedAt)}, filed {lag}d later
         </span>
-        {mirrored ? (
-          <Move from={trade.pxTraded} to={trade.pxDisclosed} label="Move between the trade and its disclosure: the part a copier cannot capture" />
-        ) : (
-          <span className="text-muted-foreground">not tokenized</span>
-        )}
+        {move}
       </span>
     </li>
   )
@@ -59,7 +90,7 @@ export function FilingReceipt({ filing, action, compact = false }: { filing: Fil
       <header className="flex items-center gap-3 border-b px-4 py-3 sm:px-5">
         <MemberAvatar source={filing.source} />
         <div className="min-w-0 flex-1">
-          <Link href={`/p/${filing.source.slug}`} className="block truncate text-sm font-semibold hover:underline">
+          <Link href={`/app/p/${filing.source.slug}`} className="block truncate text-sm font-semibold hover:underline">
             {filing.source.name}
           </Link>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
@@ -80,11 +111,11 @@ export function FilingReceipt({ filing, action, compact = false }: { filing: Fil
 
       <ol>
         {trades.map((t) => (
-          <TradeLine key={t.id} trade={t} />
+          <TradeLine key={t.id} trade={t} compact={compact} />
         ))}
       </ol>
       {hidden > 0 && (
-        <Link href={`/p/${filing.source.slug}`} className="block border-t px-5 py-2 text-xs text-muted-foreground hover:text-foreground">
+        <Link href={`/app/p/${filing.source.slug}`} className="block border-t px-5 py-2 text-xs text-muted-foreground hover:text-foreground">
           {hidden} more {hidden === 1 ? "trade" : "trades"} on this filing
         </Link>
       )}

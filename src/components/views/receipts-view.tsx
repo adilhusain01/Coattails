@@ -28,7 +28,7 @@ export function FillRow({ e, showWallet = true }: { e: ExecutionView; showWallet
       <TableCell className="text-right">{e.usdcAmount != null ? usd(e.usdcAmount) : "-"}</TableCell>
       <TableCell className="text-right">{e.fillPx != null ? usd(e.fillPx) : "-"}</TableCell>
       <TableCell className="font-sans">
-        <Link href={`/p/${e.sourceSlug}`} className="text-xs hover:underline">
+        <Link href={`/app/p/${e.sourceSlug}`} className="text-xs hover:underline">
           {e.sourceName}
         </Link>
       </TableCell>
@@ -115,7 +115,7 @@ export function ReceiptsView({ log: initial }: { log: ReceiptsLog }) {
                 <TableRow key={f.id} className="even:bg-bar">
                   <TableCell className="text-muted-foreground">{day(f.filedAt)}</TableCell>
                   <TableCell className="font-sans">
-                    <Link href={`/p/${f.source.slug}`} className="text-sm hover:underline">
+                    <Link href={`/app/p/${f.source.slug}`} className="text-sm hover:underline">
                       {f.source.name}
                     </Link>
                   </TableCell>
