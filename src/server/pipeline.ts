@@ -6,6 +6,7 @@ import { address } from "@solana/kit"
 import { and, asc, desc, eq, inArray, isNull, lte } from "drizzle-orm"
 import { db, schema } from "./db"
 import { readHouseFiling, syncHouseIndex } from "./ingest/house"
+import { syncForm4 } from "./ingest/sec"
 import { livePrice } from "./prices"
 import { tokenBySymbol } from "./registry"
 import { fillBuy, fillSell, stockBalance, stockMint, usdcAllowance, writeReceipt } from "./solana/agent"
@@ -15,9 +16,17 @@ const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...arg
 /** Largest gap allowed between the live Pyth/Jupiter price and a fill, as a fraction. */
 const MAX_PRICE_AGE_S = 15 * 60
 
+let lastForm4 = 0
+const FORM4_EVERY_MS = 10 * 60_000
+
 export async function ingest() {
   const added = await syncHouseIndex(Number(process.env.HOUSE_INDEX_WINDOW ?? 40))
   if (added) log(`index: ${added} new filings`)
+  if (Date.now() - lastForm4 > FORM4_EVERY_MS) {
+    lastForm4 = Date.now()
+    const r = await syncForm4(1, 150)
+    if (r.trades) log(`form4: ${r.trades} insider purchases from ${r.candidates} filings`)
+  }
 }
 
 export async function readFilings(limit = 3) {
