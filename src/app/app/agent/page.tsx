@@ -41,10 +41,10 @@ export default async function AgentPage() {
           <Badge variant={launched ? "secondary" : "outline"}>{launched ? "Live on mainnet" : "Not launched yet"}</Badge>
         </div>
         <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
-          Coattails pays for every filing it reads and every transaction it sends, so followers never need SOL. Those costs
-          are covered by COAT, the agent&apos;s own token. It was launched on Clawpump with its price curve set in a
-          tokenized stock ({record?.pair.symbol ?? "NVDAx"}), and it trades in a Meteora pool against the same stock.
-          Clawpump pays 75% of COAT&apos;s trading fees to the agent.
+          Coattails pays the network fee on every follow, receipt and fill, and it pays Sarvam AI to read each filing.
+          COAT is how it plans to pay for that. Clawpump launched it with a price curve in{" "}
+          {record?.pair.symbol ?? "NVDAx"} instead of SOL, it also trades in a Meteora pool against{" "}
+          {record?.pair.symbol ?? "NVDAx"}, and Clawpump sends 75% of its trading fees to the agent&apos;s wallet.
         </p>
       </header>
 
@@ -54,15 +54,17 @@ export default async function AgentPage() {
         <Stat label="Follows, gas paid" value={String(work.follows)} hint="Users paid no fee" />
         <Stat label="Fills" value={String(work.fills)} hint="Buys and exits" />
       </section>
-      <p className="-mt-5 text-xs text-muted-foreground">Everything above was paid for by the agent. On devnet the fees are test SOL.</p>
+      <p className="-mt-5 text-xs text-muted-foreground">
+        The agent paid for all of the above. The copy-trading app runs on devnet, so those fees were test SOL.
+      </p>
 
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">COAT on Clawpump</CardTitle>
             <CardDescription className="text-sm">
-              A pump.fun curve priced in {record?.pair.symbol ?? "NVDAx"} instead of SOL, launched through Clawpump&apos;s
-              agent launchpad.
+              Launched through Clawpump&apos;s agent launchpad on a pump.fun curve that is priced in{" "}
+              {record?.pair.symbol ?? "NVDAx"}, so buying COAT means paying in a tokenized stock.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
@@ -77,10 +79,13 @@ export default async function AgentPage() {
                     <dt className="text-muted-foreground">Price</dt>
                     <dd className="font-mono tabular-nums">
                       {market?.priceUsd != null ? `$${market.priceUsd.toPrecision(3)}` : "-"}
+                      {market?.priceSource === "pool" && (
+                        <span className="ml-1.5 font-sans text-xs text-muted-foreground">from the Meteora pool</span>
+                      )}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt className="text-muted-foreground">Liquidity</dt>
+                    <dt className="text-muted-foreground">Liquidity across venues</dt>
                     <dd className="font-mono tabular-nums">{market?.liquidityUsd != null ? usd(market.liquidityUsd, 0) : "-"}</dd>
                   </div>
                   <div className="flex justify-between gap-4">
@@ -110,8 +115,8 @@ export default async function AgentPage() {
           <CardHeader>
             <CardTitle className="text-sm">COAT / {record?.pair.symbol ?? "NVDAx"} on Meteora</CardTitle>
             <CardDescription className="text-sm">
-              A Meteora DAMM v2 pool, so COAT can be traded directly against the tokenized stock, with liquidity on both
-              sides of the price.
+              A full-range Meteora DAMM v2 pool holding both tokens, so COAT trades directly against the tokenized
+              stock outside the curve too.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
@@ -122,11 +127,27 @@ export default async function AgentPage() {
                     <dt className="text-muted-foreground">Pool</dt>
                     <dd className="font-mono">{shortAddress(record.meteora.pool, 6)}</dd>
                   </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-muted-foreground">In the pool</dt>
+                    <dd className="text-right font-mono tabular-nums">
+                      {market?.reserves
+                        ? `${market.reserves.token.toLocaleString("en-US", { maximumFractionDigits: 0 })} COAT, ${market.reserves.pair.toFixed(5)} ${record.pair.symbol}`
+                        : "-"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-muted-foreground">Pool value</dt>
+                    <dd className="font-mono tabular-nums">{market?.poolValueUsd != null ? usd(market.poolValueUsd) : "-"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-muted-foreground">Trading fee</dt>
+                    <dd className="font-mono tabular-nums">1%</dd>
+                  </div>
                 </dl>
                 <div className="flex flex-wrap gap-x-5 gap-y-2">
                   <Ext href={`https://app.meteora.ag/dammv2/${record.meteora.pool}`}>Meteora</Ext>
                   <Ext href={solscan(`account/${record.meteora.pool}`)}>Solscan</Ext>
-                  {record.meteora.liquidityTx && <Ext href={solscan(`tx/${record.meteora.liquidityTx}`)}>Liquidity transaction</Ext>}
+                  {record.meteora.createTx && <Ext href={solscan(`tx/${record.meteora.createTx}`)}>Creation transaction</Ext>}
                 </div>
               </>
             ) : (

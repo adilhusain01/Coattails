@@ -43,6 +43,15 @@ below the peak or the position is older than `maxHoldDays`. A reported sale sell
 positions opened from that member. Selling uses a per-stock SPL allowance the follower grants once
 per stock (max amount, so later buys of the same stock are covered).
 
+## Agent token (mainnet)
+
+The only mainnet piece. COAT was launched through Clawpump's self-funded launch (preflight quote,
+SOL payment, resubmit with the signature) with `pumpQuoteMint` set to NVDAx, then given a
+full-range Meteora DAMM v2 pool against NVDAx (`scripts/launch/*`). The launch wallet is
+`keys/launch.json`, separate from the devnet agent key. The record lives in
+`src/server/data/agent-token.json`; `/app/agent` reads it, prices COAT from the pool's vault
+balances until Jupiter indexes it, and counts what the agent has paid for.
+
 ## Custody model
 
 No pooled funds and no custom program. A follower's "vault" is their own wallet:

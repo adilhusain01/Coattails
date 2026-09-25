@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  ArrowSquareOut,
   Clock,
   Coins,
   FileText,
@@ -22,6 +23,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { agentToken } from "@/server/agent-token"
 import { latestFilings, sourceProfile } from "@/server/queries"
 import { tokenBySymbol, tokenCount } from "@/server/registry"
 import type { FilingView } from "@/server/queries"
@@ -111,11 +113,11 @@ const FAQ = [
   },
   {
     q: "Is this running with real money?",
-    a: "Today it runs on Solana devnet with test USDC and live stock prices. On mainnet the only change is that each purchase goes through a Jupiter swap into the real tokenized stock.",
+    a: "The copy-trading runs on Solana devnet with test USDC and live stock prices, so anyone can try it without risking money. On mainnet the only change is that each purchase goes through a Jupiter swap into the real tokenized stock. The agent's token, COAT, and its Meteora pool are already live on mainnet.",
   },
   {
     q: "Who pays the network fees?",
-    a: "The agent does, for every follow, receipt and fill. Those costs are covered by COAT, the agent's own token, launched on Clawpump against a tokenized stock and traded in a Meteora pool. See the Agent page in the app.",
+    a: "The agent does, for every follow, receipt and fill. COAT, the agent's own token, is how it plans to pay for that: Clawpump sends 75% of COAT's trading fees to the agent's wallet. COAT is live on mainnet, priced in NVDAx, with a Meteora pool against NVDAx.",
   },
   {
     q: "Is this investment advice?",
@@ -186,6 +188,7 @@ export default async function Landing() {
     latest.find((f) => f.kind === "house_ptr" && f.trades.some((t) => t.tokenSymbol)) ??
     latest[0]
   const example = walkthroughExample(featured, latest)
+  const coat = agentToken()
 
   return (
     <>
@@ -334,6 +337,58 @@ export default async function Landing() {
         </Section>
 
         <Separator />
+
+        {coat?.mint && (
+          <>
+            <Section
+              id="agent"
+              title="The agent pays its own way"
+              intro="Reading filings and paying every network fee costs the agent money. Its own token is how it plans to cover that, and the token and its pool are already live on Solana mainnet."
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card className="gap-3">
+                  <CardHeader className="gap-2">
+                    <CardTitle className="text-sm">COAT, launched on Clawpump</CardTitle>
+                    <CardDescription className="text-sm leading-relaxed">
+                      Its price curve is set in {coat.pair.symbol} instead of SOL, so buying COAT means paying in a tokenized
+                      stock. Clawpump sends 75% of its trading fees to the agent.
+                    </CardDescription>
+                  </CardHeader>
+                  <div className="flex flex-wrap gap-x-5 gap-y-2 px-(--card-spacing) text-sm">
+                    {coat.clawpump?.pumpUrl && (
+                      <a href={coat.clawpump.pumpUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
+                        pump.fun <ArrowSquareOut aria-hidden />
+                      </a>
+                    )}
+                    <a href={`https://solscan.io/token/${coat.mint}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
+                      Solscan <ArrowSquareOut aria-hidden />
+                    </a>
+                  </div>
+                </Card>
+                <Card className="gap-3">
+                  <CardHeader className="gap-2">
+                    <CardTitle className="text-sm">COAT / {coat.pair.symbol} on Meteora</CardTitle>
+                    <CardDescription className="text-sm leading-relaxed">
+                      A Meteora DAMM v2 pool holding both tokens, so COAT also trades directly against the stock.
+                    </CardDescription>
+                  </CardHeader>
+                  <div className="flex flex-wrap gap-x-5 gap-y-2 px-(--card-spacing) text-sm">
+                    {coat.meteora?.pool && (
+                      <a href={`https://app.meteora.ag/dammv2/${coat.meteora.pool}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
+                        Meteora <ArrowSquareOut aria-hidden />
+                      </a>
+                    )}
+                    <Link href="/app/agent" className="hover:underline">
+                      Agent page
+                    </Link>
+                  </div>
+                </Card>
+              </div>
+            </Section>
+
+            <Separator />
+          </>
+        )}
 
         <Section id="solana" title="Why it runs on Solana">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

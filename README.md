@@ -9,6 +9,14 @@ outside the US. Coattails connects the two.
 
 Built for the Stocklana hackathon (Solana, September 2026).
 
+| | |
+|---|---|
+| Site | https://coattails.adilhusain.xyz |
+| App (devnet) | https://coattails.adilhusain.xyz/app |
+| Live demo, four scenarios on devnet | https://coattails.adilhusain.xyz/app/demo |
+| Agent token COAT (mainnet) | [`5JtyjnqicMFsT59BxJhT3TURqwwgASwCeQUQXj5SdgWN`](https://solscan.io/token/5JtyjnqicMFsT59BxJhT3TURqwwgASwCeQUQXj5SdgWN), launched on Clawpump, priced in NVDAx |
+| COAT/NVDAx pool (mainnet) | Meteora DAMM v2 [`D8iqEXcL4xpy8gHDiSdaQVhiGveqoNYrt9uZrFK3j9P9`](https://app.meteora.ag/dammv2/D8iqEXcL4xpy8gHDiSdaQVhiGveqoNYrt9uZrFK3j9P9) |
+
 ## What happens when a member files
 
 1. **The filing is published.** House members file Periodic Transaction Reports (PTRs) with the
@@ -46,6 +54,23 @@ each stock's real daily closes from the report date, replayed one trading day pe
 month of market plays out in under a minute. After an exit the chart keeps plotting the real
 closes, so the viewer sees what the exit avoided or gave up.
 
+## The agent's token
+
+Coattails pays the network fee on every follow, receipt and fill, and pays Sarvam AI to read each
+filing. COAT is how the agent plans to pay for that. It was launched through Clawpump's agent
+launchpad with its pump.fun curve priced in NVDAx instead of SOL, and it has a full-range Meteora
+DAMM v2 pool against NVDAx. Clawpump sends 75% of COAT's trading fees to the agent's wallet.
+
+- `scripts/launch/token.ts` checks the pair with Clawpump, pays the quoted launch fee and records the
+  token. It is a dry run unless given `--pay`.
+- `scripts/launch/pool.ts` buys a little NVDAx and COAT through Jupiter and creates the pool at the
+  price those buys set. It simulates the pool transaction and only sends it with `--send`.
+- `/app/agent` shows the token, the pool's reserves, a price derived from them, and what the agent
+  has paid for so far.
+
+The pool is DAMM v2 rather than DLMM because its accounts cost about 0.02 SOL in rent against more
+than 0.1 SOL for a DLMM pool, and DAMM v2 is also where Meteora's bonding curves graduate.
+
 ## Why Solana
 
 - **Global.** A wallet works in any country. A brokerage account does not.
@@ -72,6 +97,7 @@ closes, so the viewer sees what the exit avoided or gave up.
 | `src/server/demo.ts`, `src/app/app/demo` | The live demo engine and page |
 | `scripts/e2e.ts` | Devnet end-to-end: faucet, gasless follow, mirrored buys, allow selling, trailing-stop exit |
 | `src/app/page.tsx` | Landing page; the app lives under `/app` |
+| `scripts/launch/*`, `src/app/app/agent` | COAT launch on Clawpump, the Meteora pool, and the Agent page |
 | `src/app/api/actions/*`, `src/app/actions.json` | Solana Actions: share `/app/p/<member>` and it unfolds as a "Mirror" Blink |
 | `docs/ARCHITECTURE.md` | Design and custody model |
 | `docs/INTEGRATIONS.md` | Verified API facts for every data source |

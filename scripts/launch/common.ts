@@ -27,7 +27,7 @@ export type AgentTokenRecord = {
   wallet: string
   pair: { symbol: string; mint: string; decimals: number }
   clawpump?: { agentId: string; launchTx: string; paymentTx: string; pumpUrl?: string; dashboard?: string; at: string }
-  meteora?: { pool: string; createTx: string | null; position?: string; liquidityTx?: string | null; at: string }
+  meteora?: { pool: string; createTx: string | null; position?: string; liquidityTx?: string | null; vaultA?: string; vaultB?: string; at: string }
 }
 
 export function readRecord(): AgentTokenRecord | null {
