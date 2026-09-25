@@ -17,7 +17,13 @@ const FALLBACK = process.env.READER_FALLBACK_MODEL ?? "google/gemini-3.8-flash"
 const PtrLine = z.object({
   owner: z.enum(["self", "spouse", "joint", "dependent"]).describe("SP=spouse, JT=joint, DC=dependent, blank=self"),
   assetName: z.string().describe("Asset name exactly as written, without the ticker and asset-type tag"),
-  ticker: z.string().nullable().describe("Ticker from the parentheses, uppercase; null if none is written"),
+  ticker: z
+    .string()
+    .nullable()
+    .describe(
+      "Ticker from the parentheses, uppercase. If none is written but the asset is plainly a US-listed common stock or ETF named on the form (e.g. 'MERCK & CO INC. CMN' is MRK), give its ticker and set tickerInferred=true. Otherwise null.",
+    ),
+  tickerInferred: z.boolean().describe("True when the ticker was not printed on the form and was identified from the asset name"),
   assetType: z.string().describe("Asset-type code from the brackets, e.g. ST, OP, GS, CS; empty if none"),
   side: z.enum(["buy", "sell", "exchange"]).describe("P=buy, S or S (partial)=sell, E=exchange"),
   tradeDate: z.string().describe("Transaction date, YYYY-MM-DD"),
@@ -135,7 +141,8 @@ function router() {
     apiKey: process.env.OPENROUTER_API_KEY,
     baseURL: "https://openrouter.ai/api/v1",
     defaultHeaders: { "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://coattails.adilhusain.xyz", "X-Title": "Coattails" },
-    timeout: 180_000,
+    // Long paper filings can take several minutes to transcribe.
+    timeout: 600_000,
     maxRetries: 1,
   })
   return openrouter
@@ -158,7 +165,8 @@ const PTR_SCHEMA = strictSchema(z.toJSONSchema(PtrDoc)) as Record<string, unknow
 async function readWithModel(pdf: Buffer, model: string) {
   const request = {
     model,
-    max_tokens: 16000,
+    // Long paper filings (18+ pages) can list dozens of trades; leave room for all of them.
+    max_tokens: 64000,
     temperature: 0,
     // Transcription needs little thinking; minimal effort keeps reads fast and output tokens small.
     reasoning: { effort: "minimal" },

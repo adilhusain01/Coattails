@@ -41,7 +41,7 @@ export default async function AgentPage() {
           <Badge variant={launched ? "secondary" : "outline"}>{launched ? "Live on mainnet" : "Not launched yet"}</Badge>
         </div>
         <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
-          Coattails pays the network fee on every follow, receipt and fill, and it pays Sarvam AI to read each filing.
+          Coattails pays the network fee on every follow, receipt and fill, and it pays for the model that reads each filing.
           COAT is how it plans to pay for that. Clawpump launched it with a price curve in{" "}
           {record?.pair.symbol ?? "NVDAx"} instead of SOL, it also trades in a Meteora pool against{" "}
           {record?.pair.symbol ?? "NVDAx"}, and Clawpump sends 75% of its trading fees to the agent&apos;s wallet.
@@ -49,7 +49,7 @@ export default async function AgentPage() {
       </header>
 
       <section className="grid gap-3 sm:grid-cols-4">
-        <Stat label="Filings read" value={String(work.reads)} hint="Sarvam AI reads" />
+        <Stat label="Filings read" value={String(work.reads)} hint="House reports, by GPT-6 Luna" />
         <Stat label="Receipts written" value={String(work.receipts)} hint="Memo transactions" />
         <Stat label="Follows, gas paid" value={String(work.follows)} hint="Users paid no fee" />
         <Stat label="Fills" value={String(work.fills)} hint="Buys and exits" />

@@ -112,11 +112,18 @@ function assetCode(line: PtrExtraction["transactions"][number]) {
   return code.startsWith("OPTION") ? "OP" : code.startsWith("STOCK") ? "ST" : code
 }
 
+/** Paper forms have no asset-type code; accept a line only when its name reads as common stock. */
+function looksLikeCommonStock(name: string) {
+  if (/preferred|perpetual|hybrid|\bnote|bond|debenture|linked|warrant|\bcall\b|\bput\b|call\/|put\//i.test(name)) return false
+  return /\bcmn\b|common|class [a-c]\b|ordinary shares|\betf\b/i.test(name)
+}
+
 function mirrorable(line: PtrExtraction["transactions"][number]) {
   if (line.side === "exchange") return false
   const code = assetCode(line)
   if (code === "ST") return true
   if (code === "OP") return !/\bput/i.test(line.description ?? "")
+  if (code === "") return looksLikeCommonStock(line.assetName)
   return false
 }
 

@@ -11,15 +11,18 @@ app people will actually use?": real need, working end-to-end demo, why Solana, 
 
 ```
 House Clerk FD index ──┐                                   ┌─> follower wallet A (own USDC, own xStock ATA)
-SEC EDGAR Form 4 feed ─┼─> ingest ─> Sarvam reads PDF ─> trades ─> match ticker ─> Memo receipt ─> executor ─┼─> follower wallet B
+SEC EDGAR Form 4 feed ─┼─> ingest ─> model reads PDF ─> trades ─> match ticker ─> Memo receipt ─> executor ─┼─> follower wallet B
                        │   (worker)  (structured output)          to token mint   (filing hash)   (Pyth guard) └─> ...
 ```
 
 1. **Ingest** (`src/server/ingest/*`, run by `worker/index.ts`): polls the House Clerk 2026 index
    for new PTRs and EDGAR for new Form 4 filings with transaction code `P`.
-2. **Read**: text comes from the PDF's text layer (unpdf); scanned paper forms go through Sarvam
-   Document Intelligence OCR. `sarvam-105b` turns the text into trades with a JSON schema, and the
-   reply is validated with Zod. Output: ticker, asset name, side, amount
+2. **Read**: the PDF itself goes to GPT-6 Luna through OpenRouter (native file input, strict JSON
+   schema, minimal reasoning), so typed and scanned forms take the same path. A scan Luna marks
+   illegible is retried on Gemini 3.8 Flash. When a paper form omits the ticker, the model supplies
+   it for plainly named US stocks and flags it as inferred; untyped lines are mirrored only when
+   they read as common stock. Sarvam (`sarvam-105b` plus Document Intelligence OCR) remains as a
+   fallback when no OpenRouter key is set. Replies are validated with Zod. Output: ticker, asset name, side, amount
    range, trade date, notification date.
 3. **Match**: ticker to tokenized-stock mint via the registry (`src/server/registry.ts`, xStocks
    first, Ondo second). Unmatched tickers are stored and shown as "not tokenized yet".

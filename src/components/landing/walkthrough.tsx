@@ -181,9 +181,9 @@ export function Walkthrough({ ex }: { ex: WalkthroughExample }) {
           }
         >
           <p>
-            Most reports are typed PDF forms and some are scans of paper. Coattails pulls the text out of the PDF, or runs
-            OCR on a scan, and Sarvam AI turns every line into fields a program can act on: who, which stock, buy or sell,
-            when and how much.
+            Most reports are typed PDF forms and some are scans of paper, sometimes handwritten. The agent sends the PDF
+            itself to GPT-6 Luna, which turns every line into fields a program can act on: who, which stock, buy or sell,
+            when and how much. A scan Luna can&apos;t read cleanly gets a second pass from Gemini 3.8 Flash.
           </p>
           <p>Insider reports on SEC Form 4 are already structured, so they skip this step.</p>
         </Stage>

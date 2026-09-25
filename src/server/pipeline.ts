@@ -37,7 +37,7 @@ const WATCHLIST = (process.env.HOUSE_WATCHLIST ?? "pelosi,khanna,gottheimer,mcca
 
 let readsPausedUntil = 0
 
-export async function readFilings(limit = 5) {
+export async function readFilings(limit = Number(process.env.READ_BATCH ?? 10)) {
   if (Date.now() < readsPausedUntil) return
   const pending = await db
     .select({ filing: schema.filings, name: schema.sources.name })

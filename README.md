@@ -21,9 +21,9 @@ Built for the Stocklana hackathon (Solana, September 2026).
 
 1. **The filing is published.** House members file Periodic Transaction Reports (PTRs) with the
    Clerk, up to 45 days after trading. Company insiders file SEC Form 4 within two business days.
-2. **The agent reads it.** Sarvam AI (`sarvam-105b`) turns each PTR into structured trades. Text
-   comes from the PDF's text layer; scanned paper forms go through Sarvam Document Intelligence
-   OCR first. Form 4 is XML and is parsed directly. Each trade's ticker is matched against 950 US
+2. **The agent reads it.** The PDF goes straight to GPT-6 Luna (through OpenRouter), which turns
+   each PTR into structured trades against a strict JSON schema. Typed and scanned forms take the
+   same path; a scan Luna can't read cleanly is retried on Gemini 3.8 Flash. Form 4 is XML and is parsed directly. Each trade's ticker is matched against 950 US
    xStocks.
 3. **A receipt goes on-chain.** Before any trade, the agent writes a Memo transaction with the
    filing's sha256 hash. Anyone can check that a fill copied a real public document.
@@ -56,8 +56,8 @@ closes, so the viewer sees what the exit avoided or gave up.
 
 ## The agent's token
 
-Coattails pays the network fee on every follow, receipt and fill, and pays Sarvam AI to read each
-filing. COAT is how the agent plans to pay for that. It was launched through Clawpump's agent
+Coattails pays the network fee on every follow, receipt and fill, and pays for the model that reads
+each filing. COAT is how the agent plans to pay for that. It was launched through Clawpump's agent
 launchpad with its pump.fun curve priced in NVDAx instead of SOL, and it has a full-range Meteora
 DAMM v2 pool against NVDAx. Clawpump sends 75% of COAT's trading fees to the agent's wallet.
 
@@ -88,7 +88,7 @@ than 0.1 SOL for a DLMM pool, and DAMM v2 is also where Meteora's bonding curves
 | Path | What it does |
 |---|---|
 | `src/server/ingest/house.ts` | House Clerk yearly index: new PTRs, member photos and party |
-| `src/server/agent/read-ptr.ts` | Sarvam AI reads a PTR PDF (text layer or OCR) into structured trades |
+| `src/server/agent/read-ptr.ts` | GPT-6 Luna reads a PTR PDF into structured trades (Gemini 3.8 Flash for hard scans, Sarvam as a fallback) |
 | `src/server/ingest/sec.ts` | EDGAR Form 4: open-market insider purchases in tokenized stocks |
 | `src/server/registry.ts` | Ticker to xStock mint (US listings only) |
 | `src/server/prices.ts` | Pyth Hermes live prices and Benchmarks history, with Jupiter and Yahoo as keyless fallbacks |
@@ -125,7 +125,7 @@ npx pm2 start ecosystem.config.cjs --only coattails-web,coattails-worker
 ## Stack
 
 Next.js 16, React 19, shadcn/ui, Tailwind v4, TanStack Query, Zustand, `@solana/kit` 8 with
-Wallet Standard, `@solana-program/*`, Drizzle on libSQL, Sarvam AI SDK (`sarvam-105b`, Document Intelligence), unpdf, Pyth
+Wallet Standard, `@solana-program/*`, Drizzle on libSQL, OpenAI SDK against OpenRouter (GPT-6 Luna, Gemini 3.8 Flash), Sarvam AI as a fallback, Pyth
 Hermes, Jupiter.
 
 ## Limits

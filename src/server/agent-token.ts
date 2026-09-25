@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { count, eq, isNotNull } from "drizzle-orm"
+import { and, count, eq, isNotNull } from "drizzle-orm"
 import type { AgentTokenRecord } from "../../scripts/launch/common"
 import { db, schema } from "./db"
 
@@ -78,7 +78,10 @@ export async function agentWork() {
     db.select({ n: count() }).from(schema.filings).where(isNotNull(schema.filings.receiptSig)),
     db.select({ n: count() }).from(schema.executions).where(eq(schema.executions.status, "confirmed")),
     db.select({ n: count() }).from(schema.follows).where(isNotNull(schema.follows.approveSig)),
-    db.select({ n: count() }).from(schema.filings).where(eq(schema.filings.readBy, "sarvam")),
+    db
+      .select({ n: count() })
+      .from(schema.filings)
+      .where(and(eq(schema.filings.kind, "house_ptr"), isNotNull(schema.filings.readBy))),
   ])
   return { receipts: receipts[0].n, fills: fills[0].n, follows: follows[0].n, reads: reads[0].n }
 }
