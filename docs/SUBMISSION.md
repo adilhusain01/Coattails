@@ -37,8 +37,9 @@ the US. Coattails is the same idea for everyone Autopilot can't serve.
    time limit, or a report that the member sold will sell it, and a reported sale only sells what was
    bought from that member.
 
-Followers never need SOL: Coattails builds each transaction with itself as fee payer, the follower's
-wallet signs, and the server co-signs only the exact transaction it built.
+Followers never need SOL: Coattails builds each transaction and signs it as fee payer, the
+follower's wallet adds its signature, and the server sends it only if it is exactly the transaction
+it built.
 
 ## Why Solana
 

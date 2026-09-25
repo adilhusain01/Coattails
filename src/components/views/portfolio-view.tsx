@@ -50,7 +50,7 @@ function Figure({ label, value, hint }: { label: string; value: string; hint?: s
   )
 }
 
-/** A transaction the server builds, the wallet signs, and the server co-signs. */
+/** A transaction the server builds and signs as fee payer, the wallet signs, and the server sends. */
 function useSignedAction(buildPath: string, intent: Record<string, unknown>, done: string) {
   const connected = useConnectedWallet(client)
   const wallet = connected?.account.address
