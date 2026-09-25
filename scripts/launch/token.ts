@@ -9,6 +9,7 @@
  */
 import { address, lamports } from "@solana/kit"
 import { getTransferSolInstruction } from "@solana-program/system"
+import { tokenBySymbol } from "../../src/server/registry"
 import { arg, clawpump, flag, launchClient, readRecord, writeRecord, type AgentTokenRecord } from "./common"
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://coattails.adilhusain.xyz"
@@ -29,7 +30,10 @@ console.log(`launch wallet ${wallet}: ${balance} SOL`)
 type Pair = { symbol: string; mint: string; name: string; decimals: number }
 const pairs = await clawpump<{ assets?: Pair[] }>("/pump-pairs")
 if (pairs.status !== 200 || !pairs.body.assets) throw new Error(`pump-pairs ${pairs.status}: ${JSON.stringify(pairs.body).slice(0, 300)}`)
-const pair = pairs.body.assets.find((a) => a.symbol.toLowerCase() === pairSymbol.toLowerCase())
+// Clawpump lists xStocks by their underlying ticker ("NVDA" for NVDAx), so match on the mint.
+const wanted = tokenBySymbol(pairSymbol)?.mint
+const match = pairs.body.assets.find((a) => a.mint === wanted || a.symbol.toLowerCase() === pairSymbol.toLowerCase())
+const pair = match ? { ...match, symbol: wanted && match.mint === wanted ? pairSymbol : match.symbol } : undefined
 if (!pair) {
   console.log("Allowed pairs:", pairs.body.assets.map((a) => a.symbol).join(", "))
   throw new Error(`${pairSymbol} is not an allowed Clawpump pair`)
