@@ -15,7 +15,7 @@ function clampOrNull(v: unknown, min: number, max: number) {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null
 }
 
-/** Co-signs a wallet-signed transaction the server built, then records what it did. */
+/** Sends a wallet-signed transaction the server built, then records what it did. */
 export async function POST(req: Request) {
   return handle(async () => {
     const body = (await req.json()) as { wallet?: string; signed?: string; intent?: Intent }

@@ -228,11 +228,12 @@ async function unsignedForWallet(owner: Address, instructions: Instruction[]) {
     (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
     (m) => appendTransactionMessageInstructions(instructions, m),
   )
-  const tx = compileTransaction(message)
-  const wire = getBase64EncodedWireTransaction(tx)
-  // Remember the exact message so the co-sign step only signs what we built.
+  // The agent signs as fee payer before the wallet sees it: wallets such as Phantom add their own
+  // instructions to an unsigned transaction, but leave one another signer has signed alone.
+  const tx = await partiallySignTransaction([client.payer.keyPair], compileTransaction(message))
+  // Remember the exact message so the submit step only sends what we built.
   pending.set(owner, { bytes: Buffer.from(tx.messageBytes).toString("base64"), expires: Date.now() + 120_000 })
-  return wire
+  return getBase64EncodedWireTransaction(tx)
 }
 
 /**
@@ -271,10 +272,7 @@ export async function buildApproveTx(owner: Address, budgetUsd: number, memo: st
 export async function buildApproveTxPresigned(owner: Address, budgetUsd: number, memo: string) {
   const wire = await buildApproveTx(owner, budgetUsd, memo)
   pending.delete(owner)
-  const client = await agentClient()
-  const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire))
-  const signed = await partiallySignTransaction([client.payer.keyPair], tx)
-  return getBase64EncodedWireTransaction(signed)
+  return wire
 }
 
 export async function buildRevokeTx(owner: Address) {
@@ -286,7 +284,7 @@ export async function buildRevokeTx(owner: Address) {
   ])
 }
 
-/** Co-signs a wallet-signed transaction as fee payer and sends it. */
+/** Checks a wallet-signed transaction is the one the server built and signed, then sends it. */
 export async function cosignAndSend(owner: Address, signedWire: string) {
   const entry = pending.get(owner)
   if (!entry || entry.expires < Date.now()) throw new Error("This request expired. Start again.")
