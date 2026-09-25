@@ -96,7 +96,8 @@ const record: AgentTokenRecord = {
     launchTx: res.body.txHash ?? "",
     paymentTx,
     pumpUrl: res.body.pumpUrl,
-    dashboard: res.body.earnings?.dashboard,
+    // The API's earnings.dashboard link 404s; the token page shows price and creator fees.
+    dashboard: `https://clawpump.tech/token/${res.body.mintAddress}`,
     at: new Date().toISOString(),
   },
 }

@@ -105,7 +105,11 @@ const FAQ = [
   },
   {
     q: "What if a member sells right before a drop?",
-    a: "You would only find out when the report comes out, possibly weeks later. The trailing stop and time limit exist for that gap. You set both when you start following someone, and the agent checks them every minute.",
+    a: "You would only find out when the report comes out, possibly weeks later. The trailing stop and time limit exist for that gap. You set both when you start following someone, and the agent checks them every 20 seconds.",
+  },
+  {
+    q: "Where do the prices come from?",
+    a: "From Pyth wherever our plan covers the stock, which today means Tesla (TSLA) and the QQQ and VOO index funds, both live and for past closes. Every other stock is priced by Jupiter live and by Yahoo Finance for past closes. The live price decides every purchase and every exit.",
   },
   {
     q: "Does Coattails hold my money?",
@@ -355,6 +359,11 @@ export default async function Landing() {
                     </CardDescription>
                   </CardHeader>
                   <div className="flex flex-wrap gap-x-5 gap-y-2 px-(--card-spacing) text-sm">
+                    {coat.clawpump?.dashboard && (
+                      <a href={coat.clawpump.dashboard} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
+                        Clawpump <ArrowSquareOut aria-hidden />
+                      </a>
+                    )}
                     {coat.clawpump?.pumpUrl && (
                       <a href={coat.clawpump.pumpUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
                         pump.fun <ArrowSquareOut aria-hidden />

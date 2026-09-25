@@ -58,7 +58,7 @@ export function FillsTable({ rows, showWallet = true }: { rows: ExecutionView[];
             {showWallet && <TableHead>Wallet</TableHead>}
             <TableHead>Trade</TableHead>
             <TableHead className="text-right">USDC</TableHead>
-            <TableHead className="text-right">Pyth price</TableHead>
+            <TableHead className="text-right">Fill price</TableHead>
             <TableHead>Copies</TableHead>
             <TableHead>Result</TableHead>
           </TableRow>

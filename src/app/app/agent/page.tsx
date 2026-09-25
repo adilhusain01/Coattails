@@ -4,11 +4,15 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { shortAddress, usd } from "@/lib/format"
 import { agentToken, agentWork, tokenMarket } from "@/server/agent-token"
+import { livePrices } from "@/server/prices"
 
 export const dynamic = "force-dynamic"
 export const metadata: Metadata = { title: "The agent's token" }
 
 const solscan = (path: string) => `https://solscan.io/${path}`
+
+/** The equity feeds the Pyth plan grants; every other stock is priced by Jupiter and Yahoo. */
+const PYTH_TICKERS = ["TSLA", "QQQ", "VOO"]
 
 function Ext({ href, children }: { href: string; children: React.ReactNode }) {
   return (
@@ -30,7 +34,11 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 
 export default async function AgentPage() {
   const record = agentToken()
-  const [market, work] = await Promise.all([record ? tokenMarket(record) : null, agentWork()])
+  const [market, work, pyth] = await Promise.all([
+    record ? tokenMarket(record) : null,
+    agentWork(),
+    livePrices(PYTH_TICKERS).catch(() => null),
+  ])
   const launched = !!record?.mint
 
   return (
@@ -49,7 +57,7 @@ export default async function AgentPage() {
       </header>
 
       <section className="grid gap-3 sm:grid-cols-4">
-        <Stat label="Filings read" value={String(work.reads)} hint="House reports, by GPT-6 Luna" />
+        <Stat label="Filings read" value={String(work.reads)} hint="House reports, read from the PDF" />
         <Stat label="Receipts written" value={String(work.receipts)} hint="Memo transactions" />
         <Stat label="Follows, gas paid" value={String(work.follows)} hint="Users paid no fee" />
         <Stat label="Fills" value={String(work.fills)} hint="Buys and exits" />
@@ -57,6 +65,54 @@ export default async function AgentPage() {
       <p className="-mt-5 text-xs text-muted-foreground">
         The agent paid for all of the above. The copy-trading app runs on devnet, so those fees were test SOL.
       </p>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Reading</CardTitle>
+            <CardDescription className="text-sm">
+              Each House report goes to GPT-6 Luna as a PDF and comes back as one row per trade, checked against a strict
+              schema. A scan Luna can&apos;t read cleanly gets a second pass from Gemini 3.8 Flash. Form 4 is XML and is
+              parsed directly.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Prices</CardTitle>
+            <CardDescription className="text-sm">
+              Pyth prices the stocks our plan covers, live and for past closes. Jupiter and Yahoo price the rest.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-1 text-sm">
+              {PYTH_TICKERS.map((t) => {
+                const q = pyth?.get(t)
+                return (
+                  <div key={t} className="flex justify-between gap-4">
+                    <dt className="font-mono">{t}</dt>
+                    <dd className="font-mono tabular-nums">
+                      {q ? usd(q.price) : "-"}
+                      <span className="ml-1.5 font-sans text-xs text-muted-foreground">
+                        {q?.source.startsWith("pyth") ? "Pyth" : q ? "Jupiter, market closed" : ""}
+                      </span>
+                    </dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Signing</CardTitle>
+            <CardDescription className="text-sm">
+              The agent signs every transaction as fee payer before your wallet sees it, and sends it only if it is exactly
+              the one it built. Receipts and fills are signed by the agent alone and carry the filing&apos;s hash in a memo.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -98,7 +154,7 @@ export default async function AgentPage() {
                 <div className="flex flex-wrap gap-x-5 gap-y-2">
                   <Ext href={solscan(`token/${record.mint}`)}>Solscan</Ext>
                   {record.clawpump?.pumpUrl && <Ext href={record.clawpump.pumpUrl}>pump.fun</Ext>}
-                  {record.clawpump?.dashboard && <Ext href={record.clawpump.dashboard}>Clawpump earnings</Ext>}
+                  {record.clawpump?.dashboard && <Ext href={record.clawpump.dashboard}>Clawpump</Ext>}
                   {record.clawpump?.launchTx && <Ext href={solscan(`tx/${record.clawpump.launchTx}`)}>Launch transaction</Ext>}
                 </div>
               </>

@@ -104,7 +104,7 @@ export function HomeView(props: { filings: FilingView[]; leaders: LeaderRow[] })
             <h2 className="text-sm font-semibold">Exits run for you</h2>
             <p className="text-xs leading-relaxed text-muted-foreground">
               Reports can arrive weeks after a sale, so every position has a trailing stop and a time limit you choose
-              when you start mirroring. The agent checks them every minute.
+              when you start mirroring. The agent checks them every 20 seconds.
             </p>
           </section>
         </aside>
