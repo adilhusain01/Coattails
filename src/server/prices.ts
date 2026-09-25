@@ -6,7 +6,7 @@
 import { tokenForTicker } from "./registry"
 
 const HERMES = "https://hermes.pyth.network"
-const BENCHMARKS = "https://benchmarks.pyth.network"
+const PYTH_PRO_HISTORY = "https://pyth.dourolabs.app/v1"
 const JUP = "https://api.jup.ag"
 
 export type Quote = {
@@ -20,6 +20,21 @@ export type Quote = {
 }
 
 const pythKey = () => process.env.PYTH_API_KEY || null
+
+/**
+ * Equity feeds the Pyth plan grants, e.g. the Demo trial's TSLA,QQQ,VOO. Unset means "try every
+ * ticker"; any feed Pyth refuses is remembered and not asked for again.
+ */
+const PYTH_EQUITIES = (process.env.PYTH_EQUITY_TICKERS ?? "")
+  .split(",")
+  .map((t) => t.trim().toUpperCase())
+  .filter(Boolean)
+const deniedFeeds = new Set<string>()
+
+export function pythCovers(ticker: string) {
+  if (!pythKey()) return false
+  return PYTH_EQUITIES.length === 0 || PYTH_EQUITIES.includes(ticker.toUpperCase())
+}
 
 function pythHeaders(): HeadersInit {
   const key = pythKey()
@@ -44,7 +59,9 @@ async function feedId(symbol: string, assetType: "equity" | "crypto"): Promise<s
 type HermesParsed = { id: string; price: { price: string; conf: string; expo: number; publish_time: number } }
 
 async function hermesLatest(id: string) {
+  if (deniedFeeds.has(id)) throw new Error("Pyth plan does not include this feed")
   const res = await fetch(`${HERMES}/v2/updates/price/latest?ids[]=${id}&parsed=true`, { headers: pythHeaders() })
+  if (res.status === 401 || res.status === 403) deniedFeeds.add(id)
   if (!res.ok) throw new Error(`Hermes ${res.status}`)
   const body = (await res.json()) as { parsed: HermesParsed[] }
   const p = body.parsed[0].price
@@ -63,7 +80,7 @@ export async function livePrice(ticker: string): Promise<Quote> {
     // A key may not be entitled to every feed; any Pyth failure falls through to Jupiter.
     try {
       const now = Math.floor(Date.now() / 1000)
-      const eqId = await feedId(`Equity.US.${ticker}/USD`, "equity")
+      const eqId = pythCovers(ticker) ? await feedId(`Equity.US.${ticker}/USD`, "equity") : null
       if (eqId) {
         const q = await hermesLatest(eqId).catch(() => null)
         if (q && now - q.publishTime < 120) return { ...q, source: "pyth:equity" }
@@ -127,7 +144,22 @@ export async function livePrices(tickers: string[]) {
     cache.set(ticker, { quote, at: now })
   }
 
-  if (pythKey()) {
+  // Pyth equity feeds for the tickers the plan covers; only fresh prints count (market hours).
+  const covered = want.filter((w) => pythCovers(w.ticker) && PYTH_EQUITIES.length > 0)
+  await Promise.all(
+    covered.map(async (w) => {
+      try {
+        const id = await feedId(`Equity.US.${w.ticker}/USD`, "equity")
+        if (!id) return
+        const q = await hermesLatest(id)
+        if (Date.now() / 1000 - q.publishTime < 120) put(w.ticker, { ...q, source: "pyth:equity" })
+      } catch {
+        /* not covered or not published right now */
+      }
+    }),
+  )
+
+  if (pythKey() && PYTH_EQUITIES.length === 0) {
     try {
       const ids = await Promise.all(want.map((w) => feedId(`Crypto.${w.symbol.toUpperCase()}/USD`, "crypto")))
       const pairs = want.map((w, i) => [w, ids[i]] as const).filter(([, id]) => id)
@@ -178,20 +210,10 @@ export async function livePrices(tickers: string[]) {
 
 /** Official close of the underlying on a date (the trade date or the disclosure date). */
 export async function closeOn(ticker: string, date: Date): Promise<number | null> {
-  if (pythKey()) {
-    const id = await feedId(`Equity.US.${ticker}/USD`, "equity")
-    if (id) {
-      // 20:00 UTC is the 16:00 ET close (EDT); Benchmarks returns the last update at or before it.
-      const close = new Date(date)
-      close.setUTCHours(20, 0, 0, 0)
-      const ts = Math.floor(close.getTime() / 1000)
-      const res = await fetch(`${BENCHMARKS}/v1/updates/price/${ts}?ids=${id}&parsed=true`, { headers: pythHeaders() })
-      if (res.ok) {
-        const body = (await res.json()) as { parsed: HermesParsed[] }
-        const p = body.parsed?.[0]?.price
-        if (p) return Number(p.price) * 10 ** p.expo
-      }
-    }
+  // Look back five days so weekends and holidays resolve to the prior session.
+  const pyth = await pythDailyCloses(ticker, new Date(date.getTime() - 5 * 86_400_000), date).catch(() => null)
+  if (pyth?.length && pyth.at(-1)!.date >= new Date(date.getTime() - 5 * 86_400_000).toISOString().slice(0, 10)) {
+    return pyth.at(-1)!.close
   }
   return yahooClose(ticker, date)
 }
@@ -217,10 +239,39 @@ async function yahooClose(ticker: string, date: Date): Promise<number | null> {
   return null
 }
 
-export type DailyClose = { date: string; close: number }
+export type DailyClose = { date: string; close: number; source: "pyth" | "yahoo" }
 
-/** Daily closes of the underlying from `from` to `to` (inclusive), oldest first. Source: Yahoo chart API. */
+/**
+ * Daily candles from the Pyth Pro history API for tickers the plan covers, or null. The trial keeps
+ * history from 2026-05-22, so a window that starts earlier comes back short and the caller uses Yahoo.
+ */
+async function pythDailyCloses(ticker: string, from: Date, to: Date): Promise<DailyClose[] | null> {
+  if (!pythCovers(ticker) || PYTH_EQUITIES.length === 0) return null
+  const qs = new URLSearchParams({
+    symbol: `Equity.US.${ticker}/USD`,
+    resolution: "D",
+    from: String(Math.floor(from.getTime() / 1000) - 86_400),
+    to: String(Math.floor(to.getTime() / 1000) + 86_400),
+  })
+  const res = await fetch(`${PYTH_PRO_HISTORY}/fixed_rate@200ms/history?${qs}`, { headers: pythHeaders() })
+  if (!res.ok) return null
+  const body = (await res.json()) as { s: string; t: number[]; c: number[] }
+  if (body.s !== "ok") return null
+  const toDay = to.toISOString().slice(0, 10)
+  return body.t
+    .map((t, i) => ({ date: new Date(t * 1000).toISOString().slice(0, 10), close: body.c[i], source: "pyth" as const }))
+    .filter((d) => d.date <= toDay)
+}
+
+/** Daily closes of the underlying from `from` to `to`, oldest first: Pyth Pro when it covers the whole window, else Yahoo. */
 export async function dailyCloses(ticker: string, from: Date, to = new Date()): Promise<DailyClose[]> {
+  const pyth = await pythDailyCloses(ticker, from, to).catch(() => null)
+  const firstNeeded = new Date(from.getTime() + 4 * 86_400_000).toISOString().slice(0, 10)
+  if (pyth?.length && pyth[0].date <= firstNeeded) return pyth.filter((d) => d.date >= from.toISOString().slice(0, 10))
+  return yahooDailyCloses(ticker, from, to)
+}
+
+async function yahooDailyCloses(ticker: string, from: Date, to: Date): Promise<DailyClose[]> {
   const start = new Date(from)
   start.setUTCHours(0, 0, 0, 0)
   const p1 = Math.floor(start.getTime() / 1000)
@@ -239,7 +290,7 @@ export async function dailyCloses(ticker: string, from: Date, to = new Date()): 
   const out: DailyClose[] = []
   ts.forEach((t, i) => {
     const c = closes[i]
-    if (c != null) out.push({ date: new Date(t * 1000).toISOString().slice(0, 10), close: c })
+    if (c != null) out.push({ date: new Date(t * 1000).toISOString().slice(0, 10), close: c, source: "yahoo" })
   })
   return out
 }

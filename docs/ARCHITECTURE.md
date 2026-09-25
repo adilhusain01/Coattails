@@ -85,7 +85,8 @@ Everything except the fill function is identical across modes.
   `@solana-program/{system,token,token-2022,memo}`. Transactions are v0 for wallet compatibility.
 - Data: libSQL (SQLite file) via Drizzle ORM. `data/coattails.db`.
 - Agent: `sarvamai` SDK: `sarvam-105b` chat with JSON-schema output, Document Intelligence for OCR.
-- Prices: Pyth Hermes (latest) and Pyth Benchmarks (historical, for disclosure-lag cost).
+- Prices: Pyth Hermes (latest) and Pyth Pro history candles (`https://pyth.dourolabs.app/v1/{channel}/history`) for the
+  tickers the plan grants (`PYTH_EQUITY_TICKERS`, Demo trial: TSLA, QQQ, VOO); Jupiter price v3 and Yahoo for the rest.
 - Runtime: pm2 runs `web` (next start, port 3000) and `worker` (tsx). Public URL via Tailscale Funnel.
 
 ## Layout

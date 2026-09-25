@@ -81,10 +81,13 @@ paid for so far.
 
 ### Pyth
 
-Pyth is the primary price source in the code: `Equity.US.<ticker>/USD` during market hours and the
-24/7 `Crypto.<ticker>X/USD` xStock feed otherwise, used for the price check on every fill and exit,
-and Pyth Benchmarks for the price on a trade's date. Our API key is currently refused for the equity
-and xStock feeds, so the live app falls back to Jupiter's price API until the key has access.
+Pyth is the first price source the agent asks. The live app runs on a Pyth Pro Demo trial, which
+grants the `Equity.US` feeds for TSLA, QQQ and VOO. For those three, the price behind every fill and
+every trailing-stop check comes from Hermes, and a trade's price on its trade and disclosure dates
+comes from Pyth Pro's daily candles (the trial keeps them from May 22).
+Pyth Pro refuses any feed the plan doesn't grant, NVDA included, so every other stock is priced by
+Jupiter live and by Yahoo for past closes. Adding a ticker to the plan and to
+`PYTH_EQUITY_TICKERS` moves it onto Pyth without code changes.
 
 ### Meteora
 

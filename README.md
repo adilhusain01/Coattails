@@ -91,7 +91,7 @@ than 0.1 SOL for a DLMM pool, and DAMM v2 is also where Meteora's bonding curves
 | `src/server/agent/read-ptr.ts` | GPT-6 Luna reads a PTR PDF into structured trades (Gemini 3.8 Flash for hard scans, Sarvam as a fallback) |
 | `src/server/ingest/sec.ts` | EDGAR Form 4: open-market insider purchases in tokenized stocks |
 | `src/server/registry.ts` | Ticker to xStock mint (US listings only) |
-| `src/server/prices.ts` | Pyth Hermes live prices and Benchmarks history, with Jupiter and Yahoo as keyless fallbacks |
+| `src/server/prices.ts` | Pyth Hermes live prices and Pyth Pro daily candles for the tickers the plan grants (`PYTH_EQUITY_TICKERS`), Jupiter and Yahoo for the rest |
 | `src/server/solana/agent.ts` | Agent key: receipts, gasless follow (agent pays fees), fills, revoke |
 | `src/server/pipeline.ts`, `worker/index.ts` | Two loops: ingest and read every minute; receipts, mirrors and exits every 20 seconds |
 | `src/server/demo.ts`, `src/app/app/demo` | The live demo engine and page |
