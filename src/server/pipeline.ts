@@ -330,7 +330,7 @@ export async function guardExits() {
 /** Slow loop: pull new filings and read them. EDGAR and the House index are polled politely. */
 export async function ingestTick() {
   await ingest().catch((e) => log("ingest failed", e))
-  if (process.env.SARVAM_API_KEY) await readFilings()
+  if (process.env.OPENROUTER_API_KEY || process.env.SARVAM_API_KEY) await readFilings()
 }
 
 /** Fast loop: receipts, mirrors and exits. Kept separate so a slow ingest never delays an exit. */

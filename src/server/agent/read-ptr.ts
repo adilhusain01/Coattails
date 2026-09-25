@@ -4,10 +4,15 @@ import { join } from "node:path"
 import { strFromU8, unzipSync } from "fflate"
 import { PDFDocument } from "pdf-lib"
 import { SarvamAIClient } from "sarvamai"
+import OpenAI from "openai"
 import { extractText, getDocumentProxy } from "unpdf"
 import { z } from "zod"
 
 const MODEL = "sarvam-105b"
+/** Primary reader: reads the PDF itself, typed or scanned. */
+const LUNA = process.env.READER_MODEL ?? "openai/gpt-6-luna"
+/** Second opinion for scans the primary reader marks illegible. */
+const FALLBACK = process.env.READER_FALLBACK_MODEL ?? "google/gemini-3.8-flash"
 
 const PtrLine = z.object({
   owner: z.enum(["self", "spouse", "joint", "dependent"]).describe("SP=spouse, JT=joint, DC=dependent, blank=self"),
@@ -112,8 +117,91 @@ export async function filingText(pdf: Buffer) {
   return { text: await ocr(pdf), readBy: "sarvam+ocr" }
 }
 
-/** Reads one PTR PDF into structured transactions. */
+// OpenRouter (GPT-6 Luna) ----------------------------------------------------------------------
+
+const LUNA_SYSTEM = `You transcribe US House Periodic Transaction Reports (PTRs) into JSON.
+The attached PDF is either a typed e-filed form or a scan of a paper form, sometimes handwritten.
+Each transaction row has: owner code (SP, JT, DC or blank), asset name with ticker in parentheses
+and an asset-type code in brackets such as [ST] or [OP], a transaction type (P purchase, S sale,
+S (partial), E exchange), transaction date, notification date, and an amount range such as
+$1,001 - $15,000. On paper forms the amount is a checked column; read which column is marked.
+A "D:" line under a row is its description (e.g. option strike and expiry). Copy what the form
+says and never invent trades. Include every transaction row on every page. Set legible=false if
+the scan is too damaged to read the transactions reliably.`
+
+let openrouter: OpenAI | null = null
+function router() {
+  openrouter ??= new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+    defaultHeaders: { "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://coattails.adilhusain.xyz", "X-Title": "Coattails" },
+    timeout: 180_000,
+    maxRetries: 1,
+  })
+  return openrouter
+}
+
+/** Strict JSON schema: every object closed and every property required, as strict mode expects. */
+function strictSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(strictSchema)
+  if (!node || typeof node !== "object") return node
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(node)) if (k !== "$schema") out[k] = strictSchema(v)
+  if (out.type === "object" && out.properties) {
+    out.additionalProperties = false
+    out.required = Object.keys(out.properties as object)
+  }
+  return out
+}
+const PTR_SCHEMA = strictSchema(z.toJSONSchema(PtrDoc)) as Record<string, unknown>
+
+async function readWithModel(pdf: Buffer, model: string) {
+  const request = {
+    model,
+    max_tokens: 16000,
+    temperature: 0,
+    // Transcription needs little thinking; minimal effort keeps reads fast and output tokens small.
+    reasoning: { effort: "minimal" },
+    // Luna and Gemini read PDFs natively, so the raw file goes to the model with no OCR step.
+    plugins: [{ id: "file-parser", pdf: { engine: "native" } }],
+    response_format: { type: "json_schema", json_schema: { name: "ptr", strict: true, schema: PTR_SCHEMA } },
+    messages: [
+      { role: "system", content: LUNA_SYSTEM },
+      {
+        role: "user",
+        content: [
+          { type: "file", file: { filename: "ptr.pdf", file_data: `data:application/pdf;base64,${pdf.toString("base64")}` } },
+          { type: "text", text: "Transcribe this Periodic Transaction Report." },
+        ],
+      },
+    ],
+  }
+  // OpenRouter's reasoning and plugins fields are not in the OpenAI SDK's types.
+  const response = await router().chat.completions.create(request as unknown as OpenAI.ChatCompletionCreateParamsNonStreaming)
+  const choice = response.choices[0]
+  if (choice.finish_reason === "length") throw new Error(`${model} ran out of tokens reading the filing`)
+  const content = choice.message.content
+  if (!content) throw new Error(`${model} returned an empty reply`)
+  const parsed = PtrDoc.safeParse(parseJson(content))
+  if (!parsed.success) throw new Error(`${model} reply did not match the schema: ${parsed.error.issues[0]?.message}`)
+  return parsed.data
+}
+
+async function readPtrOpenRouter(pdf: Buffer): Promise<PtrExtraction> {
+  const doc = await readWithModel(pdf, LUNA)
+  if (doc.legible || FALLBACK === LUNA) return { ...doc, readBy: LUNA.split("/").pop()! }
+  // A scan the primary model could not read: one retry on the fallback model.
+  const second = await readWithModel(pdf, FALLBACK)
+  return { ...second, readBy: FALLBACK.split("/").pop()! }
+}
+
+/** Reads one PTR PDF into structured transactions: GPT-6 Luna via OpenRouter, else Sarvam. */
 export async function readPtr(pdf: Buffer): Promise<PtrExtraction> {
+  if (process.env.OPENROUTER_API_KEY) return readPtrOpenRouter(pdf)
+  return readPtrSarvam(pdf)
+}
+
+async function readPtrSarvam(pdf: Buffer): Promise<PtrExtraction> {
   const { text, readBy } = await filingText(pdf)
 
   const response = await sarvam().chat.completions(
