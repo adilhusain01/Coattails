@@ -58,11 +58,11 @@ Every filing receipt and every fill is a public transaction.
 - COAT/NVDAx Meteora DAMM v2 pool on mainnet: `D8iqEXcL4xpy8gHDiSdaQVhiGveqoNYrt9uZrFK3j9P9`
 - Code: https://github.com/adilhusain01/Coattails
 
-As of September 25 the agent has read 72 House reports and 24 insider Form 4s covering 127 people,
-found 1,612 trades of which 505 are in tokenized stocks, and written 96 receipts. The rest of the
-400 House reports filed in 2026 are being read now. Across the reports read so far, trades were
-disclosed 27.5 days after they happened on average, and every filing in the app shows how far the
-stock moved in that time.
+As of September 25 the agent has read all 399 House reports filed in 2026 and 24 insider Form 4s,
+covering 127 people. They hold 4,467 trades, 2,295 of them in stocks that trade as xStocks, and the
+agent has written 423 receipts. The median trade was disclosed 26 days after it happened, and one in
+nine came in after the 45-day deadline. Every filing in the app shows how far the stock moved in that
+time.
 
 The demo scenarios use real reports and each stock's real daily closes from the report date,
 replayed one trading day per tick: a member reports a sale and Coattails sells, the price falls
