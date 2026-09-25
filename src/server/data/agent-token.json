@@ -15,5 +15,12 @@
     "pumpUrl": "https://pump.fun/coin/5JtyjnqicMFsT59BxJhT3TURqwwgASwCeQUQXj5SdgWN",
     "dashboard": "https://agents.clawpump.tech//agent/coattails-agent",
     "at": "2026-09-25T13:14:36.541Z"
+  },
+  "meteora": {
+    "pool": "D8iqEXcL4xpy8gHDiSdaQVhiGveqoNYrt9uZrFK3j9P9",
+    "createTx": "ChCVpb2osTBCVcwZDQdujwGWuWtydGzCKMku9JqpYzmYvYVEvMiikkaWt86dCsB7XX8R48VhzNZCXcJwJWryD61",
+    "position": "5spmgAbWf4GKaZdpw78LBMRZJP3HWX3ut6AEwsaiL1ev",
+    "liquidityTx": "ChCVpb2osTBCVcwZDQdujwGWuWtydGzCKMku9JqpYzmYvYVEvMiikkaWt86dCsB7XX8R48VhzNZCXcJwJWryD61",
+    "at": "2026-09-25T13:29:41.819Z"
   }
 }
