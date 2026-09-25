@@ -13,6 +13,7 @@ const NAV = [
   { href: "/app/receipts", label: "Receipts" },
   { href: "/app/portfolio", label: "Portfolio" },
   { href: "/app/demo", label: "Demo" },
+  { href: "/app/agent", label: "Agent" },
 ]
 
 export function SiteHeader() {

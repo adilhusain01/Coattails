@@ -114,6 +114,10 @@ const FAQ = [
     a: "Today it runs on Solana devnet with test USDC and live stock prices. On mainnet the only change is that each purchase goes through a Jupiter swap into the real tokenized stock.",
   },
   {
+    q: "Who pays the network fees?",
+    a: "The agent does, for every follow, receipt and fill. Those costs are covered by COAT, the agent's own token, launched on Clawpump against a tokenized stock and traded in a Meteora pool. See the Agent page in the app.",
+  },
+  {
     q: "Is this investment advice?",
     a: "No. Coattails copies public disclosures. Who you follow and how much you put in is your decision.",
   },
