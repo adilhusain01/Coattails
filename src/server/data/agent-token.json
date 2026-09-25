@@ -1,0 +1,19 @@
+{
+  "name": "Coattails Agent",
+  "symbol": "COAT",
+  "mint": "5JtyjnqicMFsT59BxJhT3TURqwwgASwCeQUQXj5SdgWN",
+  "wallet": "3JqJ1in7P5Z4TK1iUuyvd4gizFq7muTzNaS81cnHMGKu",
+  "pair": {
+    "symbol": "NVDAx",
+    "mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+    "decimals": 8
+  },
+  "clawpump": {
+    "agentId": "coattails-agent",
+    "launchTx": "2KxHHCeRs5fKFM5aNpe9G5xsJJqNAVnVDDS2HGMLeprNy2DvsJbbctLfgMnmSjjTHo89LEm32qyftu9twNZGRLig",
+    "paymentTx": "Ch6yLiAajQvP6iCHvswbVbW8nXeSu2kwhPFDMtC4AJJHzatXLV9ZfuBtWgVhZriSw978AJidFC19BQztbNEeGKY",
+    "pumpUrl": "https://pump.fun/coin/5JtyjnqicMFsT59BxJhT3TURqwwgASwCeQUQXj5SdgWN",
+    "dashboard": "https://agents.clawpump.tech//agent/coattails-agent",
+    "at": "2026-09-25T13:14:36.541Z"
+  }
+}

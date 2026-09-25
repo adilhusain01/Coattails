@@ -1,53 +1,70 @@
 /**
- * Give the Coattails agent token a stock-paired Meteora pool: a DLMM pair COAT/NVDAx with a
- * two-sided position around the market price. Mainnet. Dry run (simulate only) unless --send.
+ * Give the Coattails agent token a stock-paired Meteora pool: a DAMM v2 pool COAT/NVDAx, full
+ * range, seeded on both sides. Mainnet. Simulates only unless --send.
+ *
+ * DAMM v2 rather than DLMM: its accounts cost about 0.02 SOL in rent against 0.1+ SOL for DLMM's
+ * bin arrays and position, and it is the pool type Meteora's bonding curves graduate into.
  *
  * Seeding: spends --seed-sol SOL on NVDAx through Jupiter, then half of that NVDAx on COAT (bought
- * on its Clawpump curve through Jupiter). If COAT can't be bought yet, the position is NVDAx-only
- * (bids below the price).
+ * on its Clawpump curve through Jupiter). The pool opens at the price those two buys implied.
  *
  * The Meteora SDK is built on @solana/web3.js v1, so this script uses it; the app does not.
- * Usage: npx tsx --env-file=.env scripts/launch/pool.ts [--seed-sol 0.03] [--bin-step 25] [--fee-bps 100] [--send]
+ * Usage: npx tsx --env-file=.env scripts/launch/pool.ts [--seed-sol 0.006] [--fee-bps 100] [--send]
  */
 import { readFileSync } from "node:fs"
-import DLMM, { ActivationType, StrategyType } from "@meteora-ag/dlmm"
-import BN from "bn.js"
+import {
+  BaseFeeMode,
+  CollectFeeMode,
+  CpAmm,
+  getBaseFeeParams,
+  MAX_SQRT_PRICE,
+  MIN_SQRT_PRICE,
+  type PoolFeesParams,
+} from "@meteora-ag/cp-amm-sdk"
 import { ComputeBudgetProgram, Connection, Keypair, PublicKey, type Transaction } from "@solana/web3.js"
+import BN from "bn.js"
 import { arg, flag, jupiterSwap, MAINNET_RPC, readRecord, SOL_MINT, writeRecord } from "./common"
 
 const send = flag("send")
 const record = readRecord()
 if (!record?.mint) throw new Error("Launch the token first: scripts/launch/token.ts --pay")
+if (record.meteora?.pool) {
+  console.log(`Pool already exists: ${record.meteora.pool}`)
+  process.exit(0)
+}
 
 const connection = new Connection(MAINNET_RPC, "confirmed")
 const kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(process.env.LAUNCH_KEYPAIR_PATH ?? "keys/launch.json", "utf8"))))
 const me = kp.publicKey
-const X = new PublicKey(record.mint)
-const Y = new PublicKey(record.pair.mint)
-const binStep = Number(arg("bin-step", "25"))
+const A = new PublicKey(record.mint) // COAT
+const B = new PublicKey(record.pair.mint) // NVDAx
+const seedSol = Number(arg("seed-sol", "0.006"))
 const feeBps = Number(arg("fee-bps", "100"))
-const widthBins = Number(arg("width-bins", "20"))
-const seedSol = Number(arg("seed-sol", "0.03"))
 
-async function decimals(mint: PublicKey) {
-  const info = await connection.getParsedAccountInfo(mint)
-  return (info.value?.data as { parsed: { info: { decimals: number } } }).parsed.info.decimals
+async function tokenProgram(mint: PublicKey) {
+  const info = await connection.getAccountInfo(mint)
+  if (!info) throw new Error(`Mint ${mint.toBase58()} not found`)
+  return info.owner
 }
 async function balanceOf(mint: PublicKey) {
   const res = await connection.getParsedTokenAccountsByOwner(me, { mint })
   return res.value.reduce((a, v) => a + BigInt(v.account.data.parsed.info.tokenAmount.amount as string), 0n)
 }
-async function submit(label: string, tx: Transaction, signers: Keypair[] = [kp]) {
+async function submit(label: string, tx: Transaction, signers: Keypair[]) {
   tx.instructions.unshift(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }))
   tx.feePayer = me
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
   tx.sign(...signers)
-  if (!send) {
-    const sim = await connection.simulateTransaction(tx)
-    if (sim.value.err) throw new Error(`${label} simulation failed: ${JSON.stringify(sim.value.err)} ${sim.value.logs?.slice(-4).join(" | ")}`)
-    console.log(`${label}: simulation OK`)
+  // Always simulate first; only a clean simulation is sent.
+  const sim = await connection.simulateTransaction(tx)
+  if (sim.value.err) {
+    const detail = `${JSON.stringify(sim.value.err)} ${sim.value.logs?.slice(-5).join(" | ")}`
+    if (send) throw new Error(`${label} simulation failed: ${detail}`)
+    console.log(`${label}: simulation failed as expected before the seed swaps run (${detail.slice(0, 200)})`)
     return null
   }
+  console.log(`${label}: simulation OK (${sim.value.unitsConsumed} CU)`)
+  if (!send) return null
   const sig = await connection.sendRawTransaction(tx.serialize(), { maxRetries: 3 })
   const conf = await connection.confirmTransaction({ signature: sig, ...(await connection.getLatestBlockhash()) }, "confirmed")
   if (conf.value.err) throw new Error(`${label} failed: ${JSON.stringify(conf.value.err)}`)
@@ -55,76 +72,84 @@ async function submit(label: string, tx: Transaction, signers: Keypair[] = [kp])
   return sig
 }
 
-const [xDec, yDec] = [await decimals(X), await decimals(Y)]
-console.log(`pair ${record.symbol}/${record.pair.symbol}: ${X.toBase58()} (${xDec} dp) / ${Y.toBase58()} (${yDec} dp)`)
+console.log(`SOL balance ${(await connection.getBalance(me)) / 1e9}`)
 
-// 1. Seed the wallet with NVDAx, then COAT, through Jupiter.
-let yHeld = await balanceOf(Y)
-if (yHeld === 0n) {
+// 1. Seed both sides through Jupiter. In a dry run, amounts come from quotes.
+let bHeld = await balanceOf(B)
+if (bHeld === 0n) {
   console.log(`buying ${record.pair.symbol} with ${seedSol} SOL`)
-  const r = await jupiterSwap({ inputMint: SOL_MINT, outputMint: Y.toBase58(), amount: BigInt(Math.round(seedSol * 1e9)), dry: !send })
-  yHeld = send ? await balanceOf(Y) : r.outAmount
+  const r = await jupiterSwap({ inputMint: SOL_MINT, outputMint: B.toBase58(), amount: BigInt(Math.round(seedSol * 1e9)), dry: !send })
+  bHeld = send ? await balanceOf(B) : r.outAmount
 }
-let xHeld = await balanceOf(X)
-if (xHeld === 0n && yHeld > 0n) {
+let aHeld = await balanceOf(A)
+if (aHeld === 0n) {
   console.log(`buying ${record.symbol} with half the ${record.pair.symbol}`)
-  try {
-    const r = await jupiterSwap({ inputMint: Y.toBase58(), outputMint: X.toBase58(), amount: yHeld / 2n, dry: !send })
-    xHeld = send ? await balanceOf(X) : r.outAmount
-    yHeld = send ? await balanceOf(Y) : yHeld / 2n
-  } catch (err) {
-    console.log(`  could not buy ${record.symbol} yet (${err instanceof Error ? err.message : err}); the position will be ${record.pair.symbol}-only`)
+  if (send) {
+    await jupiterSwap({ inputMint: B.toBase58(), outputMint: A.toBase58(), amount: bHeld / 2n })
+    aHeld = await balanceOf(A)
+    bHeld = await balanceOf(B)
+  } else {
+    // Jupiter won't build a swap the wallet can't fund yet, but its order still reports the
+    // expected output, which is all a dry run needs.
+    const half = bHeld / 2n
+    const q = new URLSearchParams({ inputMint: B.toBase58(), outputMint: A.toBase58(), amount: half.toString(), taker: me.toBase58() })
+    const order = (await (await fetch(`https://api.jup.ag/swap/v2/order?${q}`)).json()) as { outAmount?: string }
+    if (!order.outAmount) throw new Error("No Jupiter route to the token yet")
+    aHeld = BigInt(order.outAmount)
+    bHeld = bHeld - half
   }
 }
+console.log(`seeding the pool with ${aHeld} raw ${record.symbol} and ${bHeld} raw ${record.pair.symbol}`)
 
-// 2. Price: NVDAx per COAT, from what Jupiter paid, else a quote.
-let price: number
-if (xHeld > 0n && yHeld > 0n) {
-  price = Number(yHeld) / 10 ** yDec / (Number(xHeld) / 10 ** xDec)
-} else {
-  const q = (await (await fetch(`https://api.jup.ag/price/v3?ids=${X.toBase58()},${Y.toBase58()}`)).json()) as Record<string, { usdPrice: number }>
-  if (!q[X.toBase58()] || !q[Y.toBase58()]) throw new Error("No price for the pair yet; buy some of the token first")
-  price = q[X.toBase58()].usdPrice / q[Y.toBase58()].usdPrice
-}
-const activeId = DLMM.getBinIdFromPrice(Number(DLMM.getPricePerLamport(xDec, yDec, price)), binStep, false)
-console.log(`price ${price.toExponential(4)} ${record.pair.symbol} per ${record.symbol} -> active bin ${activeId}`)
-
-// 3. Create the pair if it doesn't exist.
-let pool = await DLMM.getCustomizablePermissionlessLbPairIfExists(connection, X, Y)
-let createTx: string | null = null
-if (!pool) {
-  const tx = await DLMM.createCustomizablePermissionlessLbPair2(connection, new BN(binStep), X, Y, new BN(activeId), new BN(feeBps), ActivationType.Timestamp, false, me)
-  createTx = await submit("create DLMM pair", tx)
-  if (!send) {
-    console.log("Dry run. Re-run with --send to create the pool and add liquidity.")
-    process.exit(0)
-  }
-  pool = await DLMM.getCustomizablePermissionlessLbPairIfExists(connection, X, Y)
-}
-if (!pool) throw new Error("Pool was not created")
-console.log(`pool ${pool.toBase58()}`)
-
-// 4. Two-sided (or NVDAx-only) liquidity around the active bin.
-const dlmm = await DLMM.create(connection, pool)
-const active = await dlmm.getActiveBin()
-const position = Keypair.generate()
-const txs = await dlmm.initializePositionAndAddLiquidityByStrategy({
-  positionPubKey: position.publicKey,
-  user: me,
-  totalXAmount: new BN(xHeld.toString()),
-  totalYAmount: new BN(yHeld.toString()),
-  strategy: {
-    minBinId: xHeld > 0n ? active.binId - widthBins : active.binId - widthBins * 2,
-    maxBinId: xHeld > 0n ? active.binId + widthBins : active.binId,
-    strategyType: StrategyType.Spot,
-  },
-  slippage: 1,
+// 2. Create the full-range pool at the price the two buys implied.
+const cpAmm = new CpAmm(connection)
+const [aProgram, bProgram] = [await tokenProgram(A), await tokenProgram(B)]
+const { initSqrtPrice, liquidityDelta } = cpAmm.preparePoolCreationParams({
+  tokenAAmount: new BN(aHeld.toString()),
+  tokenBAmount: new BN(bHeld.toString()),
+  minSqrtPrice: MIN_SQRT_PRICE,
+  maxSqrtPrice: MAX_SQRT_PRICE,
+  collectFeeMode: CollectFeeMode.BothToken,
 })
-let liquidityTx: string | null = null
-for (const [i, t] of (Array.isArray(txs) ? txs : [txs]).entries()) liquidityTx = await submit(`add liquidity ${i + 1}`, t, [kp, position])
+// A flat fee: the time scheduler starts and ends at the same rate.
+const poolFees: PoolFeesParams = {
+  baseFee: getBaseFeeParams({
+    baseFeeMode: BaseFeeMode.FeeTimeSchedulerLinear,
+    feeTimeSchedulerParam: { startingFeeBps: feeBps, endingFeeBps: feeBps, numberOfPeriod: 0, totalDuration: 0 },
+  }),
+  compoundingFeeBps: 0,
+  padding: 0,
+  dynamicFee: null,
+}
+const positionNft = Keypair.generate()
+const { tx, pool, position } = await cpAmm.createCustomPool({
+  payer: me,
+  creator: me,
+  positionNft: positionNft.publicKey,
+  tokenAMint: A,
+  tokenBMint: B,
+  tokenAAmount: new BN(aHeld.toString()),
+  tokenBAmount: new BN(bHeld.toString()),
+  sqrtMinPrice: MIN_SQRT_PRICE,
+  sqrtMaxPrice: MAX_SQRT_PRICE,
+  initSqrtPrice,
+  liquidityDelta,
+  poolFees,
+  hasAlphaVault: false,
+  collectFeeMode: CollectFeeMode.BothToken,
+  activationPoint: null,
+  activationType: 1,
+  tokenAProgram: aProgram,
+  tokenBProgram: bProgram,
+})
+const createTx = await submit("create DAMM v2 pool", tx, [kp, positionNft])
 
+if (!send) {
+  console.log(`Dry run: pool ${pool.toBase58()} would be created. Re-run with --send.`)
+  process.exit(0)
+}
 writeRecord({
   ...record,
-  meteora: { pool: pool.toBase58(), createTx, position: position.publicKey.toBase58(), liquidityTx, at: new Date().toISOString() },
+  meteora: { pool: pool.toBase58(), createTx, position: position.toBase58(), liquidityTx: createTx, at: new Date().toISOString() },
 })
-console.log(`Meteora pool ${pool.toBase58()} saved to the record.`)
+console.log(`Meteora DAMM v2 pool ${pool.toBase58()} saved to the record.`)

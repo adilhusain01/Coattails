@@ -110,7 +110,7 @@ export default async function AgentPage() {
           <CardHeader>
             <CardTitle className="text-sm">COAT / {record?.pair.symbol ?? "NVDAx"} on Meteora</CardTitle>
             <CardDescription className="text-sm">
-              A Meteora DLMM pool, so COAT can be traded directly against the tokenized stock, with liquidity on both
+              A Meteora DAMM v2 pool, so COAT can be traded directly against the tokenized stock, with liquidity on both
               sides of the price.
             </CardDescription>
           </CardHeader>
@@ -124,15 +124,15 @@ export default async function AgentPage() {
                   </div>
                 </dl>
                 <div className="flex flex-wrap gap-x-5 gap-y-2">
-                  <Ext href={`https://app.meteora.ag/dlmm/${record.meteora.pool}`}>Meteora</Ext>
+                  <Ext href={`https://app.meteora.ag/dammv2/${record.meteora.pool}`}>Meteora</Ext>
                   <Ext href={solscan(`account/${record.meteora.pool}`)}>Solscan</Ext>
                   {record.meteora.liquidityTx && <Ext href={solscan(`tx/${record.meteora.liquidityTx}`)}>Liquidity transaction</Ext>}
                 </div>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Created right after the launch: the agent buys a little {record?.pair.symbol ?? "NVDAx"} and COAT, opens
-                the pool at the market price and adds liquidity on both sides.
+                Created right after the launch: the agent buys a little {record?.pair.symbol ?? "NVDAx"} and COAT, opens a full-range pool
+                at the price those buys set, with both tokens deposited.
               </p>
             )}
           </CardContent>
