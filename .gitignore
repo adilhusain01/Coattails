@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files: keep the template, never the real values
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,10 +41,16 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local
-.env
+# local state and secrets
 *.db
 *.db-*
 /data
 /keys
 chat.md
+
+# scratch scripts, logs, screenshots, local agent settings
+/scripts/_*
+*.log
+/logs
+/*.png
+.claude/settings.local.json
